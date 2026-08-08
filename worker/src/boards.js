@@ -6,15 +6,37 @@ export const BOARDS = [
     pageSize: 10,
     viewBody: "N",
     boardType: ""
+  },
+  {
+    key: "news",
+    name: "News",
+    boardmstId: "10d04c3f-5db2-ee66-7540-f3c62e7fd004",
+    pageSize: 10,
+    viewBody: "N",
+    boardType: ""
+  },
+  {
+    key: "open-communications",
+    name: "Open Communications",
+    boardmstId: "kd9f613e-624d-243a-bc3b-437e7d3f0f38",
+    pageSize: 10,
+    viewBody: "N",
+    boardType: ""
+  },
+  {
+    key: "family-occasions",
+    name: "Family Occasions",
+    boardmstId: "10d04c3f-5db2-ee66-7540-f3c62e7fd003",
+    pageSize: 10,
+    viewBody: "N",
+    boardType: ""
+  },
+  {
+    key: "market-life",
+    name: "장터-생활 정보",
+    boardmstId: "fd9f613e-624d-243a-bc3b-437e7d3f0f38",
+    pageSize: 10,
+    viewBody: "N",
+    boardType: ""
   }
-
-  // 다른 게시판을 추가할 때 예:
-  // {
-  //   key: "welfare",
-  //   name: "복지공지",
-  //   boardmstId: "개발자도구에서 확인한 boardmst_id",
-  //   pageSize: 10,
-  //   viewBody: "N",
-  //   boardType: ""
-  // }
 ];

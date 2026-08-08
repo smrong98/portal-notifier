@@ -1,161 +1,69 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <title>Portal Notifier</title>
-  <link rel="manifest" href="./manifest.webmanifest" />
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: #f3f4f6;
-      color: #111827;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    main { max-width: 640px; margin: 0 auto; padding: 20px 14px 60px; }
-    h1 { font-size: 25px; margin: 8px 0 20px; }
-    h2 { font-size: 16px; margin: 0 0 14px; }
-    .card {
-      background: white;
-      border-radius: 18px;
-      padding: 18px;
-      margin-bottom: 14px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
-    }
-    .status { display: flex; align-items: center; gap: 9px; font-weight: 700; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; }
-    .dot.ok { background: #10b981; }
-    .dot.bad { background: #ef4444; }
-    .meta { color: #6b7280; font-size: 13px; margin-top: 10px; line-height: 1.7; }
-    .error {
-      display: none; margin-top: 10px; padding: 10px;
-      background: #fef2f2; color: #991b1b; border-radius: 10px; font-size: 13px;
-      word-break: break-word;
-    }
-    label.field { display: block; margin: 12px 0; font-size: 13px; color: #4b5563; }
-    input, select {
-      width: 100%; margin-top: 6px; padding: 12px;
-      border: 1px solid #d1d5db; border-radius: 12px; font-size: 16px; background: white;
-    }
-    button {
-      border: 0; border-radius: 12px; padding: 12px 14px;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-      background: #111827; color: white;
-    }
-    button.secondary { background: #e5e7eb; color: #111827; }
-    button:disabled { opacity: .5; }
-    .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-    .button-row button { flex: 1; min-width: 130px; }
-    .check-row {
-      display: flex; align-items: center; gap: 10px; padding: 9px 0;
-      color: #111827; font-size: 15px;
-    }
-    .check-row input { width: 20px; height: 20px; margin: 0; }
-    .quiet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .post { padding: 13px 0; border-bottom: 1px solid #f0f0f0; }
-    .post:last-child { border-bottom: 0; }
-    .post-board { font-size: 12px; color: #6b7280; }
-    .post-title { font-size: 15px; font-weight: 650; margin-top: 4px; line-height: 1.4; }
-    .post-date { font-size: 12px; color: #9ca3af; margin-top: 5px; }
-    .empty { color: #9ca3af; font-size: 14px; padding: 8px 0; }
-    .hint { color: #6b7280; font-size: 12px; line-height: 1.55; margin-top: 8px; }
-    #toast {
-      position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px);
-      opacity: 0; background: #111827; color: white; padding: 11px 16px;
-      border-radius: 999px; transition: .2s; pointer-events: none;
-    }
-    #toast.show { transform: translate(-50%, 0); opacity: 1; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Portal Notifier</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:680px;margin:auto;padding:18px 14px 64px}h1{font-size:25px;margin:6px 0 18px}h2{font-size:16px;margin:0 0 12px}
+.card{background:#fff;border-radius:18px;padding:17px;margin-bottom:13px;box-shadow:0 1px 3px #0000000f}
+.row{display:flex;gap:9px;align-items:center}.dot{width:10px;height:10px;border-radius:99px;background:#9ca3af}.dot.ok{background:#10b981}.dot.bad{background:#ef4444}
+.meta,.hint{font-size:12px;color:#6b7280;line-height:1.6;margin-top:8px}.error{display:none;margin-top:8px;background:#fef2f2;color:#991b1b;padding:9px;border-radius:10px;font-size:12px}
+button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#fff;font-weight:700;font-size:14px}button.secondary{background:#e5e7eb;color:#111827}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.actions button{flex:1;min-width:120px}
+.field{display:block;font-size:13px;color:#4b5563;margin:10px 0}input,select{width:100%;padding:11px;margin-top:6px;border:1px solid #d1d5db;border-radius:11px;font-size:16px;background:#fff}
+.check{display:flex;gap:9px;align-items:center;padding:8px 0}.check input{width:20px;height:20px;margin:0}.times{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px}.tab{white-space:nowrap;background:#e5e7eb;color:#374151;padding:8px 11px}.tab.active{background:#111827;color:#fff}
+.post{padding:13px 0;border-bottom:1px solid #f1f5f9}.post:last-child{border-bottom:0}.board{font-size:11px;color:#6b7280}.title{font-size:15px;font-weight:650;line-height:1.42;margin-top:3px}.date{font-size:11px;color:#9ca3af;margin-top:5px}.empty{color:#9ca3af;font-size:13px;padding:8px 0}
+</style>
 </head>
-<body>
-  <main>
-    <h1>Portal Notifier</h1>
+<body><main>
+<h1>Portal Notifier</h1>
 
-    <section class="card">
-      <div class="status">
-        <span id="statusDot" class="dot"></span>
-        <span id="statusText">연결 전</span>
-      </div>
-      <div class="meta">
-        마지막 성공 확인: <span id="lastCheck">-</span><br />
-        방해금지 대기 알림: <span id="pending">0</span>개
-      </div>
-      <div id="lastError" class="error"></div>
-      <div class="button-row">
-        <button id="checkNow">지금 확인</button>
-      </div>
-    </section>
+<section class="card">
+  <div class="row"><span id="dot" class="dot"></span><strong id="statusText">연결 전</strong></div>
+  <div class="meta">마지막 성공 확인: <span id="lastCheck">-</span></div>
+  <div id="lastError" class="error"></div>
+  <div class="actions"><button id="check">지금 확인</button></div>
+</section>
 
-    <section class="card">
-      <h2>앱 연결</h2>
-      <label class="field">
-        개인 앱 키
-        <input id="clientKey" type="password" autocomplete="off"
-               placeholder="Cloudflare의 CLIENT_KEY와 동일한 값" />
-      </label>
-      <div class="button-row">
-        <button id="saveClientKey" class="secondary">앱 키 저장</button>
-        <button id="enablePush">알림 허용</button>
-      </div>
-      <div class="button-row">
-        <button id="testPush" class="secondary">테스트 알림</button>
-      </div>
-      <div class="hint">
-        회사 포탈 ID/PW가 아니라, 이 웹앱의 API를 보호하기 위한 별도 키입니다.
-        이 값만 모바일 localStorage에 저장됩니다. 포탈 비밀번호는 Cloudflare Secret에만 둡니다.
-      </div>
-      <div id="pushState" class="hint"></div>
-    </section>
+<section class="card">
+  <h2>최신 게시물</h2>
+  <div id="tabs" class="tabs"></div>
+  <div id="latest"><div class="empty">불러오는 중...</div></div>
+</section>
 
-    <section class="card">
-      <h2>확인 설정</h2>
-      <label class="field">
-        확인 주기
-        <select id="interval">
-          <option value="5">5분</option>
-          <option value="10">10분</option>
-          <option value="15">15분</option>
-          <option value="30">30분</option>
-          <option value="60">60분</option>
-        </select>
-      </label>
+<section class="card">
+  <h2>앱 연결</h2>
+  <label class="field">개인 앱 키<input id="clientKey" type="password" autocomplete="off"></label>
+  <div class="actions">
+    <button id="saveKey" class="secondary">앱 키 저장</button>
+    <button id="push">알림 허용</button>
+    <button id="test" class="secondary">테스트 알림</button>
+  </div>
+</section>
 
-      <div class="check-row">
-        <input id="quietEnabled" type="checkbox" />
-        <span>방해금지 사용</span>
-      </div>
+<section class="card">
+  <h2>알림 설정</h2>
+  <label class="field">확인 주기
+    <select id="interval"><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option><option value="60">60분</option></select>
+  </label>
+  <label class="check"><input id="quietEnabled" type="checkbox"><span>방해금지 사용</span></label>
+  <div class="times">
+    <label class="field">시작<input id="quietStart" type="time"></label>
+    <label class="field">종료<input id="quietEnd" type="time"></label>
+  </div>
+</section>
 
-      <div class="quiet-row">
-        <label class="field">
-          시작
-          <input id="quietStart" type="time" value="22:00" />
-        </label>
-        <label class="field">
-          종료
-          <input id="quietEnd" type="time" value="07:00" />
-        </label>
-      </div>
-    </section>
+<section class="card">
+  <h2>알림 받을 게시판</h2>
+  <div id="boards"></div>
+  <div class="actions"><button id="saveSettings">설정 저장</button></div>
+</section>
 
-    <section class="card">
-      <h2>게시판</h2>
-      <div id="boards"></div>
-      <div class="button-row">
-        <button id="saveSettings">설정 저장</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>최근 새 게시글</h2>
-      <div id="recent"><div class="empty">연결 후 표시됩니다.</div></div>
-    </section>
-  </main>
-
-  <div id="toast"></div>
-
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
-</body>
-</html>
+</main>
+<script src="./config.js"></script><script src="./app.js"></script>
+</body></html>
