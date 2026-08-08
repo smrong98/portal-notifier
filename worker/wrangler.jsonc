@@ -1,0 +1,48 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "portal-notifier",
+	"main": "src/index.js",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// npx wrangler kv namespace create PORTAL_KV 실행 후
+	// 아래 id를 실제 KV namespace id로 교체하세요.
+	"kv_namespaces": [
+		{
+			"binding": "PORTAL_KV",
+			"id": "c88fe3d38af4494a82563cd2a15da922"
+		}
+	],
+	// 5분마다 Worker를 깨웁니다.
+	// 앱 설정이 10/15/30/60분이면 Worker 내부에서 건너뜁니다.
+	"triggers": {
+		"crons": [
+			"*/5 * * * *"
+		]
+	},
+	"vars": {
+		"PORTAL_BASE_URL": "https://dnsep.dncompany.com",
+		"PORTAL_LOGIN_URL": "https://dnsep.dncompany.com/ldloginproc.do",
+		"PORTAL_BOARD_API_URL": "https://dnsep.dncompany.com/board/selectBoardTopFive.do",
+		// GitHub Pages 배포 후 수정
+		// 예: https://yourname.github.io/portal-notifier/
+		"APP_URL": "https://github.com/smrong98/portal-notifier",
+		// Origin에는 path가 들어가지 않습니다.
+		// 예: https://yourname.github.io
+		"ALLOWED_ORIGIN": "https://YOUR_GITHUB_ID.github.io"
+	},
+	"secrets": {
+		"required": [
+			"PORTAL_USERNAME",
+			"PORTAL_PASSWORD",
+			"CLIENT_KEY",
+			"VAPID_PUBLIC_KEY",
+			"VAPID_PRIVATE_KEY",
+			"VAPID_SUBJECT"
+		]
+	},
+	"observability": {
+		"enabled": true
+	}
+}

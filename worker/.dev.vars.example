@@ -1,0 +1,6 @@
+PORTAL_USERNAME=your_portal_id
+PORTAL_PASSWORD=your_portal_password
+CLIENT_KEY=make-a-long-random-string
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com
