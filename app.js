@@ -16,14 +16,20 @@ function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt
 function b64(v){const p="=".repeat((4-v.length%4)%4),s=(v+p).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from([...atob(s)].map(c=>c.charCodeAt(0)))}
 
 let config=null,status=null,activeTab="all";
+const LATEST_POST_LIMIT=10;
 
 function allLatest(){
+  const enabledBoards=new Set(config?.settings?.enabledBoards||[]);
   const x=Object.values(status?.latestByBoard||{}).flat();
-  return x.sort((a,b)=>new Date(b.regDt||0)-new Date(a.regDt||0));
+  return x
+    .filter(p=>enabledBoards.has(p.boardKey))
+    .sort((a,b)=>new Date(b.regDt||0)-new Date(a.regDt||0));
 }
 function tabPosts(){
-  if(activeTab==="all")return allLatest();
-  return status?.latestByBoard?.[activeTab]||[];
+  const posts=activeTab==="all"
+    ? allLatest()
+    : status?.latestByBoard?.[activeTab]||[];
+  return posts.slice(0,LATEST_POST_LIMIT);
 }
 function renderTabs(){
   const wrap=$("#tabs"); wrap.innerHTML="";
