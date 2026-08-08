@@ -1,4 +1,5 @@
 const $=s=>document.querySelector(s);
+const $$=s=>document.querySelectorAll(s);
 const worker=(window.PORTAL_NOTIFIER_CONFIG?.WORKER_URL||"").replace(/\/$/,"");
 const key=()=>localStorage.getItem("portalNotifierClientKey")||"";
 
@@ -92,7 +93,10 @@ async function saveSettings(){
     quietStart:$("#quietStart").value,
     quietEnd:$("#quietEnd").value,
     timezone:"Asia/Seoul",
-    enabledBoards:Array.from(document.querySelectorAll("#boards input:checked"),x=>x.value)
+    // `$` returns only one element. Always collect the checkbox NodeList before
+    // converting it to an array; spreading a single input caused Safari's
+    // "not iterable" error when settings were saved.
+    enabledBoards:Array.from($$("#boards input:checked"),x=>x.value)
   })});
   await load();
 }
