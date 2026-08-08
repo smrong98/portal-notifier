@@ -92,7 +92,7 @@ async function saveSettings(){
     quietStart:$("#quietStart").value,
     quietEnd:$("#quietEnd").value,
     timezone:"Asia/Seoul",
-    enabledBoards:[...$("#boards input:checked")].map(x=>x.value)
+    enabledBoards:Array.from(document.querySelectorAll("#boards input:checked"),x=>x.value)
   })});
   await load();
 }

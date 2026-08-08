@@ -1,0 +1,42 @@
+diff --git a/app.js b/app.js
+index b32b23ca90baa08de0b33c650b17a9a1068c3032..528eb97f40450225170e5510995075a4b1bfe266 100644
+--- a/app.js
++++ b/app.js
+@@ -70,36 +70,36 @@ async function load(){
+   for(const b of config.boards){
+     const l=document.createElement("label"); l.className="check";
+     l.innerHTML=`<input type="checkbox" value="${esc(b.key)}" ${s.enabledBoards.includes(b.key)?"checked":""}><span>${esc(b.name)}</span>`;
+     $("#boards").appendChild(l);
+   }
+   renderStatus();renderTabs();renderLatest();
+ }
+ async function pushSetup(){
+   const perm=await Notification.requestPermission();
+   if(perm!=="granted")throw new Error("알림 권한이 허용되지 않았습니다.");
+   const reg=await navigator.serviceWorker.register("./sw.js");
+   await navigator.serviceWorker.ready;
+   const {publicKey}=await api("/api/vapid-public-key");
+   let sub=await reg.pushManager.getSubscription();
+   if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(publicKey)});
+   await api("/api/push/subscribe",{method:"POST",body:JSON.stringify(sub.toJSON())});
+   alert("알림 연결 완료");
+ }
+ async function saveSettings(){
+   await api("/api/settings",{method:"PUT",body:JSON.stringify({
+     intervalMinutes:Number($("#interval").value),
+     quietEnabled:$("#quietEnabled").checked,
+     quietStart:$("#quietStart").value,
+     quietEnd:$("#quietEnd").value,
+     timezone:"Asia/Seoul",
+-    enabledBoards:[...$("#boards input:checked")].map(x=>x.value)
++    enabledBoards:Array.from(document.querySelectorAll("#boards input:checked"),x=>x.value)
+   })});
+   await load();
+ }
+ $("#clientKey").value=key();
+ $("#saveKey").onclick=()=>{localStorage.setItem("portalNotifierClientKey",$("#clientKey").value.trim());load().catch(e=>alert(e.message))};
+ $("#check").onclick=async()=>{try{await api("/api/check",{method:"POST"});await load()}catch(e){alert(e.message)}};
+ $("#push").onclick=()=>pushSetup().catch(e=>alert(e.message));
+ $("#test").onclick=()=>api("/api/push/test",{method:"POST"}).catch(e=>alert(e.message));
+ $("#saveSettings").onclick=()=>saveSettings().catch(e=>alert(e.message));
+ load().catch(e=>{console.error(e);$("#statusText").textContent=e.message});
