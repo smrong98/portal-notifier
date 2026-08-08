@@ -27,10 +27,8 @@
 		"PORTAL_BOARD_API_URL": "https://dnsep.dncompany.com/board/selectBoardTopFive.do",
 		// GitHub Pages 배포 후 수정
 		// 예: https://yourname.github.io/portal-notifier/
-		"APP_URL": "https://github.com/smrong98/portal-notifier",
-		// Origin에는 path가 들어가지 않습니다.
-		// 예: https://yourname.github.io
-		"ALLOWED_ORIGIN": "https://YOUR_GITHUB_ID.github.io"
+		"APP_URL": "https://smrong98.github.io/portal-notifier/",
+    "ALLOWED_ORIGIN": "https://smrong98.github.io"
 	},
 	"secrets": {
 		"required": [
