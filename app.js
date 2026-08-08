@@ -40,7 +40,13 @@ function renderLatest(){
   const posts=tabPosts();
   if(!posts.length){wrap.innerHTML='<div class="empty">표시할 최신 게시물이 없습니다.</div>';return}
   for(const p of posts){
-    const d=document.createElement("div"); d.className="post";
+    const d=document.createElement(p.url ? "a" : "div");
+    d.className="post";
+    if(p.url){
+      d.href=p.url;
+      d.target="_blank";
+      d.rel="noopener noreferrer";
+    }
     d.innerHTML=`<div class="board">${esc(p.boardName)}</div><div class="title">${esc(p.title)}</div><div class="date">${esc(p.regDt||"")}</div>`;
     wrap.appendChild(d);
   }

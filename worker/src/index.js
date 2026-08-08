@@ -165,16 +165,25 @@ async function fetchBoard(env, jar, board) {
   return data.result;
 }
 
-function normalize(board, p) {
+function buildPostUrl(env, boardId) {
+  const u = new URL("/board/boardview.do", env.PORTAL_BASE_URL);
+  u.searchParams.set("board_id", boardId);
+  u.searchParams.set("page_no", "0");
+  return u.toString();
+}
+
+function normalize(env, board, p) {
+  const id = String(p.board_id ?? `${board.key}:${p.board_seq ?? p.board_num}`);
   return {
     boardKey: board.key,
     boardName: board.name,
     boardmstId: board.boardmstId,
-    id: String(p.board_id ?? `${board.key}:${p.board_seq ?? p.board_num}`),
+    id,
     title: String(p._title ?? p.title ?? "(제목 없음)").trim(),
     regDt: p.reg_dt ?? null,
     boardSeq: p.board_seq ?? null,
     boardNum: p.board_num ?? null,
+    url: p.board_id ? buildPostUrl(env, p.board_id) : null,
     detectedAt: nowIso()
   };
 }
@@ -229,23 +238,67 @@ async function push(env, payload) {
 
 async function notify(env, posts) {
   if (!posts.length) return;
+
   if (posts.length <= 3) {
     for (const p of posts) {
       await push(env,{
         title:`[${p.boardName}] 새 게시글`,
         body:p.title,
         tag:`portal-${p.id}`,
-        data:{url:env.APP_URL}
+        data:{url:p.url || env.APP_URL}
       });
     }
   } else {
     await push(env,{
       title:`새 게시글 ${posts.length}개`,
-      body:posts.slice(0,3).map(p=>p.title).join(" · "),
+      body:posts.slice(0,3).map(p=>`• ${p.title}`).join("\n"),
       tag:"portal-summary",
       data:{url:env.APP_URL}
     });
   }
+}
+
+function latestForEnabledBoards(settings, state, limit = 5) {
+  const enabled = new Set(settings.enabledBoards || []);
+  return Object.values(state.latestByBoard || {})
+    .flat()
+    .filter(p => enabled.has(p.boardKey))
+    .sort((a,b) => new Date(b.regDt || 0) - new Date(a.regDt || 0))
+    .slice(0, limit);
+}
+
+async function sendLatestTestPush(env) {
+  const settings = await getSettings(env);
+  const state = await getState(env);
+
+  let latest = latestForEnabledBoards(settings, state, 5);
+
+  // 아직 latest 캐시가 없다면 즉시 한 번 조회해서 채운다.
+  if (!latest.length) {
+    await monitor(env, { force: true });
+    const refreshed = await getState(env);
+    latest = latestForEnabledBoards(settings, refreshed, 5);
+  }
+
+  if (!latest.length) {
+    return push(env, {
+      title: "Portal Notifier",
+      body: "알림 대상으로 설정된 게시판에서 표시할 최신 게시글이 없습니다.",
+      tag: "portal-test-empty",
+      data: { url: env.APP_URL }
+    });
+  }
+
+  const body = latest
+    .map((p, i) => `${i + 1}. [${p.boardName}] ${p.title}`)
+    .join("\n");
+
+  return push(env, {
+    title: `최신 게시글 ${latest.length}개`,
+    body,
+    tag: "portal-latest-test",
+    data: { url: env.APP_URL }
+  });
 }
 
 function due(settings,state,force=false) {
@@ -273,7 +326,7 @@ async function monitor(env,{force=false}={}) {
     const detected = [];
 
     for (const board of enabled) {
-      const posts = (await fetchBoard(env,jar,board)).map(p=>normalize(board,p));
+      const posts = (await fetchBoard(env,jar,board)).map(p=>normalize(env,board,p));
       state.latestByBoard[board.key] = posts.slice(0,10);
 
       const seen = new Set(state.seenByBoard[board.key] || []);
@@ -362,12 +415,7 @@ async function api(request,env) {
   }
 
   if (url.pathname==="/api/push/test" && request.method==="POST") {
-    return json({ok:true,...await push(env,{
-      title:"Portal Notifier",
-      body:"테스트 알림이 정상적으로 도착했습니다.",
-      tag:"portal-test",
-      data:{url:env.APP_URL}
-    })});
+    return json({ok:true,...await sendLatestTestPush(env)});
   }
 
   return json({error:"Not found"},404);
