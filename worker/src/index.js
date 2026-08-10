@@ -1,5 +1,7 @@
 import webpush from "web-push";
 import { BOARDS } from "./boards.js";
+import { cookieHeader, login } from "./portalSession.js";
+import { getMeal, refreshMeal } from "./mealPdf.js";
 
 const SETTINGS_KEY = "settings";
 const STATE_KEY = "monitor_state";
@@ -92,52 +94,6 @@ async function getState(env) {
 
 const saveState = (env, state) =>
   env.PORTAL_KV.put(STATE_KEY, JSON.stringify(state));
-
-function parseSetCookies(headers) {
-  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
-  const v = headers.get("set-cookie");
-  return v ? v.split(/,(?=\s*[^;,]+=)/) : [];
-}
-function absorbCookies(jar, headers) {
-  for (const raw of parseSetCookies(headers)) {
-    const first = raw.split(";")[0];
-    const eq = first.indexOf("=");
-    if (eq > 0) jar.set(first.slice(0,eq).trim(), first.slice(eq+1).trim());
-  }
-}
-function cookieHeader(jar) {
-  return [...jar.entries()].map(([k,v]) => `${k}=${v}`).join("; ");
-}
-
-async function login(env) {
-  const jar = new Map();
-  const body = new URLSearchParams({
-    username: env.PORTAL_USERNAME,
-    password: env.PORTAL_PASSWORD,
-    remember_me: "Y"
-  });
-
-  let res = await fetch(env.PORTAL_LOGIN_URL, {
-    method:"POST",
-    redirect:"manual",
-    headers:{"content-type":"application/x-www-form-urlencoded"},
-    body: body.toString()
-  });
-  absorbCookies(jar, res.headers);
-
-  for (let i=0;i<5 && [301,302,303,307,308].includes(res.status);i++) {
-    const loc = res.headers.get("location");
-    if (!loc) break;
-    res = await fetch(new URL(loc, env.PORTAL_BASE_URL).toString(), {
-      redirect:"manual",
-      headers:{"Cookie":cookieHeader(jar)}
-    });
-    absorbCookies(jar, res.headers);
-  }
-
-  if (!jar.size) throw new Error("포탈 로그인 후 세션 쿠키를 얻지 못했습니다.");
-  return jar;
-}
 
 async function fetchBoard(env, jar, board) {
   const u = new URL(env.PORTAL_BOARD_API_URL);
@@ -405,6 +361,32 @@ async function api(request,env) {
     catch(e) { return json({ok:false,error:String(e?.message||e)},500); }
   }
 
+  if (url.pathname==="/api/meal" && request.method==="GET") {
+    const meal = await getMeal(env);
+    return meal ? json(meal) : json({error:"저장된 식단이 없습니다."},404);
+  }
+
+  if (url.pathname==="/api/meal/refresh" && request.method==="POST") {
+    try {
+      const body = await request.json().catch(() => ({}));
+      const { cached, result } = await refreshMeal(env, {
+        pdfUrl: body.pdfUrl || env.MEAL_PDF_URL,
+        force: Boolean(body.force),
+        debug: Boolean(body.debug)
+      });
+      return json({
+        ok:true,
+        cached,
+        pdfUrl:result.pdfUrl,
+        restaurants:result.restaurants.length,
+        weekStart:result.weekStart,
+        weekEnd:result.weekEnd
+      });
+    } catch(e) {
+      return json({ok:false,error:String(e?.message||e)},500);
+    }
+  }
+
   if (url.pathname==="/api/push/subscribe" && request.method==="POST") {
     const sub=await request.json();
     if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth)
@@ -428,5 +410,6 @@ export default {
   },
   async scheduled(_c,env,ctx) {
     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
+    if (env.MEAL_PDF_URL) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
   }
 };

@@ -1,100 +1,340 @@
-diff --git a/app.js b/app.js
-index ee3bbfbb3ec7bc211a482c79573784d02c3f2f0f..77777f144b94064814c546d9b6cefb4ea512b344 100644
---- a/app.js
-+++ b/app.js
-@@ -1,51 +1,57 @@
- const $=s=>document.querySelector(s);
- const $$=s=>document.querySelectorAll(s);
- const worker=(window.PORTAL_NOTIFIER_CONFIG?.WORKER_URL||"").replace(/\/$/,"");
- const key=()=>localStorage.getItem("portalNotifierClientKey")||"";
- 
- async function api(path,opt={}) {
-   const h=new Headers(opt.headers||{});
-   h.set("X-Client-Key",key());
-   if(opt.body&&!h.has("Content-Type"))h.set("Content-Type","application/json");
-   const r=await fetch(worker+path,{...opt,headers:h});
-   let b={}; try{b=await r.json()}catch{}
-   if(!r.ok)throw new Error(b.error||`HTTP ${r.status}`);
-   return b;
- }
- function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
- function b64(v){const p="=".repeat((4-v.length%4)%4),s=(v+p).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from([...atob(s)].map(c=>c.charCodeAt(0)))}
- 
- let config=null,status=null,activeTab="all";
-+const LATEST_POST_LIMIT=10;
- 
- function allLatest(){
-+  const enabledBoards=new Set(config?.settings?.enabledBoards||[]);
-   const x=Object.values(status?.latestByBoard||{}).flat();
--  return x.sort((a,b)=>new Date(b.regDt||0)-new Date(a.regDt||0));
-+  return x
-+    .filter(p=>enabledBoards.has(p.boardKey))
-+    .sort((a,b)=>new Date(b.regDt||0)-new Date(a.regDt||0));
- }
- function tabPosts(){
--  if(activeTab==="all")return allLatest();
--  return status?.latestByBoard?.[activeTab]||[];
-+  const posts=activeTab==="all"
-+    ? allLatest()
-+    : status?.latestByBoard?.[activeTab]||[];
-+  return posts.slice(0,LATEST_POST_LIMIT);
- }
- function renderTabs(){
-   const wrap=$("#tabs"); wrap.innerHTML="";
-   const tabs=[{key:"all",name:"전체"},...(config?.boards||[])];
-   for(const t of tabs){
-     const b=document.createElement("button");
-     b.className="tab"+(activeTab===t.key?" active":"");
-     b.textContent=t.name;
-     b.onclick=()=>{activeTab=t.key;renderTabs();renderLatest()};
-     wrap.appendChild(b);
+diff --git a/worker/package-lock.json b/worker/package-lock.json
+index b8642c1d9b830828e1f41334527e085e286cacd4..fdef851bec17fe527542c8fa776e8250ac10295e 100644
+--- a/worker/package-lock.json
++++ b/worker/package-lock.json
+@@ -1,41 +1,50 @@
+ {
+   "name": "portal-notifier-worker",
+   "version": "2.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "portal-notifier-worker",
+       "version": "2.0.0",
+       "dependencies": {
++        "pdfjs-dist": "^4.10.38",
+         "web-push": "^3.6.7"
+       },
+       "devDependencies": {
+         "wrangler": "^4.0.0"
+       }
+     },
++    "node_modules/pdfjs-dist": {
++      "version": "4.10.38",
++      "resolved": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.10.38.tgz",
++      "license": "Apache-2.0",
++      "engines": {
++        "node": ">=20"
++      }
++    },
+     "node_modules/@cloudflare/kv-asset-handler": {
+       "version": "0.5.0",
+       "resolved": "https://registry.npmjs.org/@cloudflare/kv-asset-handler/-/kv-asset-handler-0.5.0.tgz",
+       "integrity": "sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==",
+       "dev": true,
+       "license": "MIT OR Apache-2.0",
+       "engines": {
+         "node": ">=22.0.0"
+       }
+     },
+     "node_modules/@cloudflare/unenv-preset": {
+       "version": "2.16.1",
+       "resolved": "https://registry.npmjs.org/@cloudflare/unenv-preset/-/unenv-preset-2.16.1.tgz",
+       "integrity": "sha512-ECxObrMfyTl5bhQf/lZCXwo5G6xX9IAUo+nDMKK4SZ8m4Jvvxp52vilxyySSWh2YTZz8+HQ07qGH/2rEom1vDw==",
+       "dev": true,
+       "license": "MIT OR Apache-2.0",
+       "peerDependencies": {
+         "unenv": "2.0.0-rc.24",
+         "workerd": ">1.20260305.0 <2.0.0-0"
+       },
+       "peerDependenciesMeta": {
+         "workerd": {
+           "optional": true
+         }
+       }
+
+
+diff --git a/worker/package.json b/worker/package.json
+index f73c21c0eff83455d68bef01dc61a17935a912b4..11fd0d64671c1e854290be837faebfdffdb0716d 100644
+--- a/worker/package.json
++++ b/worker/package.json
+@@ -1,17 +1,19 @@
+ {
+   "name": "portal-notifier-worker",
+   "version": "2.0.0",
+   "private": true,
+   "type": "module",
+   "scripts": {
+     "dev": "wrangler dev --test-scheduled",
+     "deploy": "wrangler deploy",
++    "test": "node --test",
+     "vapid": "web-push generate-vapid-keys"
+   },
+   "dependencies": {
++    "pdfjs-dist": "^4.10.38",
+     "web-push": "^3.6.7"
+   },
+   "devDependencies": {
+     "wrangler": "^4.0.0"
    }
  }
- function renderLatest(){
-   const wrap=$("#latest"); wrap.innerHTML="";
-   const posts=tabPosts();
-   if(!posts.length){wrap.innerHTML='<div class="empty">표시할 최신 게시물이 없습니다.</div>';return}
-   for(const p of posts){
-     const d=document.createElement(p.url ? "a" : "div");
-     d.className="post";
-     if(p.url){
-       d.href=p.url;
-       d.target="_blank";
-       d.rel="noopener noreferrer";
+
+
+diff --git a/worker/src/index.js b/worker/src/index.js
+index 1b80dbcf7a7ee8e1e17ce50702ea959a95b1f1f3..525f5104b165b7e3b58c767ef65224a0ad779f59 100644
+--- a/worker/src/index.js
++++ b/worker/src/index.js
+@@ -1,27 +1,29 @@
+ import webpush from "web-push";
+ import { BOARDS } from "./boards.js";
++import { cookieHeader, login } from "./portalSession.js";
++import { getMeal, refreshMeal } from "./mealPdf.js";
+ 
+ const SETTINGS_KEY = "settings";
+ const STATE_KEY = "monitor_state";
+ const SUBSCRIPTIONS_KEY = "push_subscriptions";
+ 
+ const DEFAULT_SETTINGS = {
+   intervalMinutes: 5,
+   quietEnabled: false,
+   quietStart: "22:00",
+   quietEnd: "07:00",
+   timezone: "Asia/Seoul",
+   enabledBoards: BOARDS.map(b => b.key)
+ };
+ 
+ const nowIso = () => new Date().toISOString();
+ 
+ function json(data, status=200) {
+   return new Response(JSON.stringify(data), {
+     status,
+     headers: {"content-type":"application/json; charset=utf-8"}
+   });
+ }
+ 
+ function corsHeaders(request, env) {
+   const origin = request.headers.get("Origin");
+@@ -71,96 +73,50 @@ async function saveSettings(env, incoming) {
+     quietStart: /^\d{2}:\d{2}$/.test(incoming.quietStart || "") ? incoming.quietStart : "22:00",
+     quietEnd: /^\d{2}:\d{2}$/.test(incoming.quietEnd || "") ? incoming.quietEnd : "07:00",
+     timezone: incoming.timezone || "Asia/Seoul",
+     enabledBoards
+   };
+   await env.PORTAL_KV.put(SETTINGS_KEY, JSON.stringify(out));
+   return out;
+ }
+ 
+ async function getState(env) {
+   return (await env.PORTAL_KV.get(STATE_KEY, "json")) || {
+     initialized:false,
+     lastCheckAt:null,
+     lastSuccessAt:null,
+     lastError:null,
+     seenByBoard:{},
+     latestByBoard:{},
+     recent:[],
+     pending:[]
+   };
+ }
+ 
+ const saveState = (env, state) =>
+   env.PORTAL_KV.put(STATE_KEY, JSON.stringify(state));
+ 
+-function parseSetCookies(headers) {
+-  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+-  const v = headers.get("set-cookie");
+-  return v ? v.split(/,(?=\s*[^;,]+=)/) : [];
+-}
+-function absorbCookies(jar, headers) {
+-  for (const raw of parseSetCookies(headers)) {
+-    const first = raw.split(";")[0];
+-    const eq = first.indexOf("=");
+-    if (eq > 0) jar.set(first.slice(0,eq).trim(), first.slice(eq+1).trim());
+-  }
+-}
+-function cookieHeader(jar) {
+-  return [...jar.entries()].map(([k,v]) => `${k}=${v}`).join("; ");
+-}
+-
+-async function login(env) {
+-  const jar = new Map();
+-  const body = new URLSearchParams({
+-    username: env.PORTAL_USERNAME,
+-    password: env.PORTAL_PASSWORD,
+-    remember_me: "Y"
+-  });
+-
+-  let res = await fetch(env.PORTAL_LOGIN_URL, {
+-    method:"POST",
+-    redirect:"manual",
+-    headers:{"content-type":"application/x-www-form-urlencoded"},
+-    body: body.toString()
+-  });
+-  absorbCookies(jar, res.headers);
+-
+-  for (let i=0;i<5 && [301,302,303,307,308].includes(res.status);i++) {
+-    const loc = res.headers.get("location");
+-    if (!loc) break;
+-    res = await fetch(new URL(loc, env.PORTAL_BASE_URL).toString(), {
+-      redirect:"manual",
+-      headers:{"Cookie":cookieHeader(jar)}
+-    });
+-    absorbCookies(jar, res.headers);
+-  }
+-
+-  if (!jar.size) throw new Error("포탈 로그인 후 세션 쿠키를 얻지 못했습니다.");
+-  return jar;
+-}
+-
+ async function fetchBoard(env, jar, board) {
+   const u = new URL(env.PORTAL_BOARD_API_URL);
+   u.searchParams.set("boardmst_id", board.boardmstId);
+   u.searchParams.set("pageSize", String(board.pageSize || 10));
+   u.searchParams.set("view_body", board.viewBody || "N");
+   u.searchParams.set("board_type", board.boardType || "");
+   u.searchParams.set("_", String(Date.now()));
+ 
+   const res = await fetch(u, {
+     headers:{
+       "Cookie": cookieHeader(jar),
+       "accept":"application/json, text/javascript, */*; q=0.01",
+       "x-requested-with":"XMLHttpRequest",
+       "referer": env.PORTAL_BASE_URL + "/"
      }
-     d.innerHTML=`<div class="board">${esc(p.boardName)}</div><div class="title">${esc(p.title)}</div><div class="date">${esc(p.regDt||"")}</div>`;
+   });
+ 
+   if (!res.ok) throw new Error(`${board.name}: HTTP ${res.status}`);
+   const text = await res.text();
+   let data;
+   try { data = JSON.parse(text); }
+   catch { throw new Error(`${board.name}: JSON 응답이 아닙니다.`); }
+   if (!Array.isArray(data.result)) throw new Error(`${board.name}: result 배열 없음`);
+   return data.result;
+ }
+@@ -383,50 +339,77 @@ async function api(request,env) {
+       boards:BOARDS.map(({key,name})=>({key,name}))
+     });
+ 
+   if (url.pathname==="/api/settings" && request.method==="PUT")
+     return json({ok:true,settings:await saveSettings(env,await request.json())});
+ 
+   if (url.pathname==="/api/status" && request.method==="GET") {
+     const s=await getState(env);
+     return json({
+       ok:!s.lastError,
+       initialized:s.initialized,
+       lastCheckAt:s.lastCheckAt,
+       lastSuccessAt:s.lastSuccessAt,
+       lastError:s.lastError,
+       pendingCount:s.pending?.length||0,
+       latestByBoard:s.latestByBoard||{},
+       recent:s.recent||[]
+     });
+   }
+ 
+   if (url.pathname==="/api/check" && request.method==="POST") {
+     try { return json(await monitor(env,{force:true})); }
+     catch(e) { return json({ok:false,error:String(e?.message||e)},500); }
+   }
+ 
++  if (url.pathname==="/api/meal" && request.method==="GET") {
++    const meal = await getMeal(env);
++    return meal ? json(meal) : json({error:"저장된 식단이 없습니다."},404);
++  }
++
++  if (url.pathname==="/api/meal/refresh" && request.method==="POST") {
++    try {
++      const body = await request.json().catch(() => ({}));
++      const { cached, result } = await refreshMeal(env, {
++        pdfUrl: body.pdfUrl || env.MEAL_PDF_URL,
++        force: Boolean(body.force),
++        debug: Boolean(body.debug)
++      });
++      return json({
++        ok:true,
++        cached,
++        pdfUrl:result.pdfUrl,
++        restaurants:result.restaurants.length,
++        weekStart:result.weekStart,
++        weekEnd:result.weekEnd
++      });
++    } catch(e) {
++      return json({ok:false,error:String(e?.message||e)},500);
++    }
++  }
++
+   if (url.pathname==="/api/push/subscribe" && request.method==="POST") {
+     const sub=await request.json();
+     if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth)
+       return json({error:"Invalid subscription"},400);
+     const subs=await subscriptions(env);
+     await putSubscriptions(env,[...subs.filter(s=>s.endpoint!==sub.endpoint),sub]);
+     return json({ok:true});
+   }
+ 
+   if (url.pathname==="/api/push/test" && request.method==="POST") {
+     return json({ok:true,...await sendLatestTestPush(env)});
+   }
+ 
+   return json({error:"Not found"},404);
+ }
+ 
+ export default {
+   async fetch(request,env) {
+     try { return withCors(await api(request,env),request,env); }
+     catch(e) { return withCors(json({error:String(e?.message||e)},500),request,env); }
+   },
+   async scheduled(_c,env,ctx) {
+     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
++    if (env.MEAL_PDF_URL) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
+   }
+ };
 
 
-diff --git a/index.html b/index.html
-index 7838bb5b95a289efab14c2b9e67f61abbce4b612..4a027da680e9fd10eb2b1de2250285a5250a6302 100644
---- a/index.html
-+++ b/index.html
-@@ -43,27 +43,27 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
-     <button id="saveKey" class="secondary">앱 키 저장</button>
-     <button id="push">알림 허용</button>
-     <button id="test" class="secondary">최신 글 테스트 알림</button>
-   </div>
- </section>
+diff --git a/worker/wrangler.jsonc b/worker/wrangler.jsonc
+index c3742e68f77f49e6a53e499dce5f9f759ce529a9..25c117b8bdb74152610f4030fb3d97dcf995393d 100644
+--- a/worker/wrangler.jsonc
++++ b/worker/wrangler.jsonc
+@@ -1,39 +1,41 @@
+ {
+   "$schema": "./node_modules/wrangler/config-schema.json",
+   "name": "portal-notifier",
+   "main": "src/index.js",
+   "compatibility_date": "2026-08-01",
+   "compatibility_flags": ["nodejs_compat"],
  
- <section class="card">
-   <h2>알림 설정</h2>
-   <label class="field">확인 주기
-     <select id="interval"><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option><option value="60">60분</option></select>
-   </label>
-   <label class="check"><input id="quietEnabled" type="checkbox"><span>방해금지 사용</span></label>
-   <div class="times">
-     <label class="field">시작<input id="quietStart" type="time"></label>
-     <label class="field">종료<input id="quietEnd" type="time"></label>
-   </div>
- </section>
+   "kv_namespaces": [
+     {
+       "binding": "PORTAL_KV",
+       "id": "c88fe3d38af4494a82563cd2a15da922"
+     }
+   ],
  
- <section class="card">
-   <h2>알림 받을 게시판</h2>
-   <div id="boards"></div>
-   <div class="actions"><button id="saveSettings">설정 저장</button></div>
- </section>
+   "triggers": {
+     "crons": ["*/5 * * * *"]
+   },
  
- </main>
--<script src="./config.js"></script><script src="./app.js?v=20260808-1"></script>
-+<script src="./config.js"></script><script src="./app.js?v=20260808-2"></script>
- </body></html>
+   "vars": {
+     "PORTAL_BASE_URL": "https://dnsep.dncompany.com",
+     "PORTAL_LOGIN_URL": "https://dnsep.dncompany.com/ldloginproc.do",
+     "PORTAL_BOARD_API_URL": "https://dnsep.dncompany.com/board/selectBoardTopFive.do",
++    // 주간 PDF URL을 고정 배포할 때 설정합니다. API 요청의 pdfUrl로도 전달할 수 있습니다.
++    "MEAL_PDF_URL": "",
+     "APP_URL": "https://smrong98.github.io/portal-notifier/",
+     "ALLOWED_ORIGIN": "https://smrong98.github.io"
+   },
+ 
+   "secrets": {
+     "required": [
+       "PORTAL_USERNAME",
+       "PORTAL_PASSWORD",
+       "CLIENT_KEY",
+       "VAPID_PUBLIC_KEY",
+       "VAPID_PRIVATE_KEY",
+       "VAPID_SUBJECT"
+     ]
+   },
+ 
+   "observability": { "enabled": true }
+ }
