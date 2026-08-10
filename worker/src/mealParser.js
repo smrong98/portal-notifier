@@ -4,7 +4,10 @@ const MEALS = new Map([
   ["중식", "lunch"], ["점심", "lunch"],
   ["석식", "dinner"], ["저녁", "dinner"], ["야식", "lateNight"]
 ]);
-const CORNER_PATTERN = /^(?:corner\s*[\d,./&-]+|plus\s*bar|후식|추가\s*코너)$/i;
+const CORNER_PATTERN = /^corner\s*[\d,./&-]+$/i;
+const EXCLUDED_SECTION_PATTERN = /^(?:plus\s*bar|후식|추가\s*코너)$/i;
+const NUMBER_PATTERN = /^\d+(?:[.,]\d+)?$/;
+const SECTION_LINE_TOLERANCE = 3;
 
 const clean = value => String(value || "").replace(/\s+/g, " ").trim();
 const midpoint = (a, b) => (a + b) / 2;
@@ -36,8 +39,23 @@ function normalizedCorner(label) {
 
 function restaurantName(items, firstDateY) {
   const candidates = items.filter(item => item.y > firstDateY && !DATE_PATTERN.test(item.str));
+  const heading = candidates.map(item => item.str).join("").replace(/\s+/g, "");
+  if (heading.includes("남산점")) return "DN솔루션즈 남산점";
+  if (heading.includes("성주점")) return "DN솔루션즈 성주점";
   const explicit = candidates.find(item => /(?:점|사업장|식당)$/.test(item.str));
   return clean(explicit?.str || candidates.sort((a, b) => b.y - a.y || a.x - b.x)[0]?.str || "미확인 식당");
+}
+
+function nearestSectionBoundary(sections, labelY, direction, fallback) {
+  const candidates = sections.filter(section => direction === "above" ? section.y > labelY : section.y < labelY);
+  if (!candidates.length) return fallback;
+  return direction === "above"
+    ? Math.min(...candidates.map(section => section.y))
+    : Math.max(...candidates.map(section => section.y));
+}
+
+function isExcludedSectionLine(item, sections) {
+  return sections.some(section => Math.abs(item.y - section.y) <= SECTION_LINE_TOLERANCE);
 }
 
 function parsePage(page, referenceDate) {
@@ -55,12 +73,17 @@ function parsePage(page, referenceDate) {
     : Math.max(...items.map(item => item.x)) - Math.min(...items.map(item => item.x));
   const dateColumns = bounds(headerXs, headerXs[0] - typicalGap / 2, headerXs.at(-1) + typicalGap / 2);
   const mealLabels = items.filter(item => MEALS.has(item.str)).sort((a, b) => b.y - a.y);
-  const mealRows = bounds(mealLabels.map(item => item.y), Infinity, -Infinity).map((row, index) => ({
-    ...row,
-    top: index ? midpoint(mealLabels[index - 1].y, row.value) : dateHeaders[0].item.y,
-    bottom: index < mealLabels.length - 1 ? midpoint(row.value, mealLabels[index + 1].y) : -Infinity,
-    label: mealLabels[index]
-  }));
+  const excludedSections = items.filter(item => EXCLUDED_SECTION_PATTERN.test(item.str));
+  const mealRows = bounds(mealLabels.map(item => item.y), Infinity, -Infinity).map((row, index) => {
+    const defaultTop = index ? midpoint(mealLabels[index - 1].y, row.value) : dateHeaders[0].item.y;
+    const defaultBottom = index < mealLabels.length - 1 ? midpoint(row.value, mealLabels[index + 1].y) : -Infinity;
+    return {
+      ...row,
+      top: nearestSectionBoundary(excludedSections, row.value, "above", defaultTop),
+      bottom: nearestSectionBoundary(excludedSections, row.value, "below", defaultBottom),
+      label: mealLabels[index]
+    };
+  });
   const days = {};
 
   dateHeaders.forEach((header, columnIndex) => {
@@ -73,6 +96,7 @@ function parsePage(page, referenceDate) {
     const dayResult = {};
 
     for (const row of mealRows) {
+      const mealKey = MEALS.get(row.label.str);
       const area = items.filter(item => item.x >= column.min && item.x < column.max && item.y < row.top && item.y >= row.bottom);
       // 코너 표시는 날짜 셀 내부가 아니라 행의 좌측에 한 번만 표시되는 양식도 있다.
       const corners = items.filter(item => item.y < row.top && item.y >= row.bottom && CORNER_PATTERN.test(item.str))
@@ -83,11 +107,13 @@ function parsePage(page, referenceDate) {
         const top = corner.y;
         const bottom = index < sections.length - 1 ? sections[index + 1].y : row.bottom;
         const menu = area.filter(item => item !== corner && !MEALS.has(item.str) && !DATE_PATTERN.test(item.str)
-          && !CORNER_PATTERN.test(item.str) && item.y <= top && item.y >= bottom)
+          && !CORNER_PATTERN.test(item.str) && !EXCLUDED_SECTION_PATTERN.test(item.str)
+          && !isExcludedSectionLine(item, excludedSections) && item.y <= top && item.y >= bottom
+          && !(mealKey === "lunch" && normalizedCorner(corner.str).toLowerCase() === "corner3" && NUMBER_PATTERN.test(item.str)))
           .sort((a, b) => b.y - a.y || a.x - b.x).map(item => item.str);
         if (menu.length) result[normalizedCorner(corner.str)] = menu;
       });
-      if (Object.keys(result).length) dayResult[MEALS.get(row.label.str)] = result;
+      if (Object.keys(result).length) dayResult[mealKey] = result;
     }
     days[date] = dayResult;
   });
