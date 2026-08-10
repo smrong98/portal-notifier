@@ -18,6 +18,7 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
 .check{display:flex;gap:9px;align-items:center;padding:8px 0}.check input{width:20px;height:20px;margin:0}.times{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px}.tab{white-space:nowrap;background:#e5e7eb;color:#374151;padding:8px 11px}.tab.active{background:#111827;color:#fff}
 .post{display:block;padding:13px 0;border-bottom:1px solid #f1f5f9;color:inherit;text-decoration:none}.post:last-child{border-bottom:0}.board{font-size:11px;color:#6b7280}.title{font-size:15px;font-weight:650;line-height:1.42;margin-top:3px}.date{font-size:11px;color:#9ca3af;margin-top:5px}.empty{color:#9ca3af;font-size:13px;padding:8px 0}
+.meal-date{font-size:13px;color:#6b7280;margin:-4px 0 12px}.restaurant{border-top:1px solid #f1f5f9;padding:12px 0}.restaurant:first-child{border-top:0;padding-top:0}.restaurant strong{display:block;margin-bottom:7px}.meal-row{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:13px;line-height:1.55;margin-top:5px}.meal-label{color:#6b7280;font-weight:700}.meal-setting{display:grid;grid-template-columns:1fr 125px;align-items:center;gap:10px}.meal-setting .check{margin:0}.meal-setting .field{margin:5px 0}
 </style>
 </head>
 <body><main>
@@ -28,6 +29,13 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
   <div class="meta">마지막 성공 확인: <span id="lastCheck">-</span></div>
   <div id="lastError" class="error"></div>
   <div class="actions"><button id="check">지금 확인</button></div>
+</section>
+
+<section class="card">
+  <h2>오늘의 식단</h2>
+  <div id="mealDate" class="meal-date"></div>
+  <div id="meal"><div class="empty">불러오는 중...</div></div>
+  <div class="actions"><button id="refreshMeal" class="secondary">식단 새로고침</button></div>
 </section>
 
 <section class="card">
@@ -56,6 +64,12 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
     <label class="field">시작<input id="quietStart" type="time"></label>
     <label class="field">종료<input id="quietEnd" type="time"></label>
   </div>
+  <div class="hint">식단 알림 시간</div>
+  <div id="mealSettings"></div>
+  <div class="actions">
+    <select id="testMeal" aria-label="테스트할 식사"><option value="breakfast">조식</option><option value="lunch" selected>중식</option><option value="dinner">석식</option></select>
+    <button id="mealTest" class="secondary">식단 테스트 알림</button>
+  </div>
 </section>
 
 <section class="card">
@@ -65,5 +79,5 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
 </section>
 
 </main>
-<script src="./config.js"></script><script src="./app.js?v=20260808-2"></script>
+<script src="./config.js"></script><script src="./app.js?v=20260810-1"></script>
 </body></html>

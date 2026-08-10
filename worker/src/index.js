@@ -6,6 +6,7 @@ import { getMeal, refreshMeal } from "./mealPdf.js";
 const SETTINGS_KEY = "settings";
 const STATE_KEY = "monitor_state";
 const SUBSCRIPTIONS_KEY = "push_subscriptions";
+const MEAL_NOTIFICATION_STATE_KEY = "meal_notification_state";
 
 const DEFAULT_SETTINGS = {
   intervalMinutes: 5,
@@ -13,6 +14,11 @@ const DEFAULT_SETTINGS = {
   quietStart: "22:00",
   quietEnd: "07:00",
   timezone: "Asia/Seoul",
+  mealNotifications: {
+    breakfast: { enabled: true, time: "07:30" },
+    lunch: { enabled: true, time: "11:30" },
+    dinner: { enabled: true, time: "17:30" }
+  },
   enabledBoards: BOARDS.map(b => b.key)
 };
 
@@ -57,7 +63,25 @@ function authorized(req, env) {
 
 async function getSettings(env) {
   const s = await env.PORTAL_KV.get(SETTINGS_KEY, "json");
-  return {...DEFAULT_SETTINGS, ...(s || {})};
+  return {
+    ...DEFAULT_SETTINGS,
+    ...(s || {}),
+    mealNotifications: {
+      ...DEFAULT_SETTINGS.mealNotifications,
+      ...(s?.mealNotifications || {})
+    }
+  };
+}
+
+function mealNotificationSettings(incoming) {
+  const source = incoming?.mealNotifications || {};
+  return Object.fromEntries(Object.entries(DEFAULT_SETTINGS.mealNotifications).map(([meal, fallback]) => {
+    const value = source[meal] || {};
+    return [meal, {
+      enabled: value.enabled === undefined ? fallback.enabled : Boolean(value.enabled),
+      time: /^\d{2}:\d{2}$/.test(value.time || "") ? value.time : fallback.time
+    }];
+  }));
 }
 
 async function saveSettings(env, incoming) {
@@ -73,6 +97,7 @@ async function saveSettings(env, incoming) {
     quietStart: /^\d{2}:\d{2}$/.test(incoming.quietStart || "") ? incoming.quietStart : "22:00",
     quietEnd: /^\d{2}:\d{2}$/.test(incoming.quietEnd || "") ? incoming.quietEnd : "07:00",
     timezone: incoming.timezone || "Asia/Seoul",
+    mealNotifications: mealNotificationSettings(incoming),
     enabledBoards
   };
   await env.PORTAL_KV.put(SETTINGS_KEY, JSON.stringify(out));
@@ -257,6 +282,57 @@ async function sendLatestTestPush(env) {
   });
 }
 
+const MEAL_NAMES = { breakfast: "조식", lunch: "중식", dinner: "석식" };
+
+export function localDateTime(tz, date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).formatToParts(date).filter(x => x.type !== "literal").map(x => [x.type, x.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+export function mealForDate(meal, date, mealKey) {
+  const restaurants = (meal?.restaurants || []).map(restaurant => {
+    const corners = restaurant.days?.[date]?.[mealKey];
+    if (!corners) return null;
+    const menu = Object.entries(corners).flatMap(([corner, items]) =>
+      corner === "menu" ? items : [`${corner}: ${items.join(", ")}`]);
+    return menu.length ? { name: restaurant.restaurant, menu } : null;
+  }).filter(Boolean);
+  return restaurants;
+}
+
+async function sendMealPush(env, mealKey, date, { test = false } = {}) {
+  const meal = await getMeal(env);
+  const restaurants = mealForDate(meal, date, mealKey);
+  const name = MEAL_NAMES[mealKey];
+  const body = restaurants.length
+    ? restaurants.map(r => `[${r.name}] ${r.menu.join(" · ")}`).join("\n")
+    : `${date}에 등록된 ${name} 메뉴가 없습니다.`;
+  return push(env, {
+    title: `${test ? "[테스트] " : ""}오늘의 ${name}`,
+    body,
+    tag: `portal-meal-${mealKey}-${test ? "test" : date}`,
+    data: { url: env.APP_URL }
+  });
+}
+
+async function notifyDueMeals(env, date = new Date()) {
+  const settings = await getSettings(env);
+  const local = localDateTime(settings.timezone, date);
+  const state = await env.PORTAL_KV.get(MEAL_NOTIFICATION_STATE_KEY, "json") || {};
+  for (const [mealKey, notification] of Object.entries(settings.mealNotifications)) {
+    const deliveryKey = `${local.date}:${mealKey}`;
+    if (notification.enabled && local.time >= notification.time && !state[deliveryKey]) {
+      const result = await sendMealPush(env, mealKey, local.date);
+      if (result.sent > 0) state[deliveryKey] = nowIso();
+    }
+  }
+  const recent = Object.fromEntries(Object.entries(state).filter(([key]) => key >= local.date));
+  await env.PORTAL_KV.put(MEAL_NOTIFICATION_STATE_KEY, JSON.stringify(recent));
+}
+
 function due(settings,state,force=false) {
   if (force || !state.lastCheckAt) return true;
   return Date.now()-new Date(state.lastCheckAt).getTime()
@@ -400,6 +476,14 @@ async function api(request,env) {
     return json({ok:true,...await sendLatestTestPush(env)});
   }
 
+  if (url.pathname==="/api/push/meal-test" && request.method==="POST") {
+    const body = await request.json().catch(() => ({}));
+    const mealKey = Object.hasOwn(MEAL_NAMES, body.meal) ? body.meal : "lunch";
+    const settings = await getSettings(env);
+    const { date } = localDateTime(settings.timezone);
+    return json({ok:true,...await sendMealPush(env, mealKey, date, {test:true})});
+  }
+
   return json({error:"Not found"},404);
 }
 
@@ -411,5 +495,6 @@ export default {
   async scheduled(_c,env,ctx) {
     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
     if (env.MEAL_PDF_URL) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
+    ctx.waitUntil(notifyDueMeals(env).catch(e=>console.error("meal notification",e)));
   }
 };
