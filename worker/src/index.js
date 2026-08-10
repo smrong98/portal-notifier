@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { BOARDS } from "./boards.js";
 import { cookieHeader, login } from "./portalSession.js";
-import { getMeal, refreshMeal } from "./mealPdf.js";
+import { getMeal, getMeals, refreshMeal } from "./mealPdf.js";
 
 const SETTINGS_KEY = "settings";
 const STATE_KEY = "monitor_state";
@@ -303,12 +303,23 @@ export function mealForDate(meal, date, mealKey) {
   return restaurants;
 }
 
+export function formatMealNotification(restaurants) {
+  return restaurants.map(restaurant =>
+    `[${restaurant.name}]\n${restaurant.menu.join("\n")}`
+  ).join("\n\n");
+}
+
+export function shouldRefreshMeal(date = new Date(), timezone = "Asia/Seoul") {
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(date);
+  return weekday === "Fri" || weekday === "Sat";
+}
+
 async function sendMealPush(env, mealKey, date, { test = false } = {}) {
-  const meal = await getMeal(env);
+  const meal = await getMeal(env, date);
   const restaurants = mealForDate(meal, date, mealKey);
   const name = MEAL_NAMES[mealKey];
   const body = restaurants.length
-    ? restaurants.map(r => `[${r.name}] ${r.menu.join(" · ")}`).join("\n")
+    ? formatMealNotification(restaurants)
     : `${date}에 등록된 ${name} 메뉴가 없습니다.`;
   return push(env, {
     title: `${test ? "[테스트] " : ""}오늘의 ${name}`,
@@ -438,25 +449,36 @@ async function api(request,env) {
   }
 
   if (url.pathname==="/api/meal" && request.method==="GET") {
-    const meal = await getMeal(env);
+    const requestedDate = url.searchParams.get("date") || localDateTime("Asia/Seoul").date;
+    const meal = await getMeal(env, requestedDate);
     return meal ? json(meal) : json({error:"저장된 식단이 없습니다."},404);
+  }
+
+  if (url.pathname==="/api/meals" && request.method==="GET") {
+    const weeks = await getMeals(env);
+    return weeks.length ? json({weeks}) : json({error:"저장된 식단이 없습니다."},404);
   }
 
   if (url.pathname==="/api/meal/refresh" && request.method==="POST") {
     try {
       const body = await request.json().catch(() => ({}));
       const { cached, result } = await refreshMeal(env, {
-        pdfUrl: body.pdfUrl || env.MEAL_PDF_URL,
+        pdfUrl: body.pdfUrl || undefined,
         force: Boolean(body.force),
         debug: Boolean(body.debug)
       });
+      const availableWeeks = (await getMeals(env)).map(meal => ({
+        weekStart: meal.weekStart,
+        weekEnd: meal.weekEnd
+      }));
       return json({
         ok:true,
         cached,
         pdfUrl:result.pdfUrl,
         restaurants:result.restaurants.length,
         weekStart:result.weekStart,
-        weekEnd:result.weekEnd
+        weekEnd:result.weekEnd,
+        availableWeeks
       });
     } catch(e) {
       return json({ok:false,error:String(e?.message||e)},500);
@@ -494,7 +516,7 @@ export default {
   },
   async scheduled(_c,env,ctx) {
     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
-    if (env.MEAL_PDF_URL) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
+    if (shouldRefreshMeal()) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
     ctx.waitUntil(notifyDueMeals(env).catch(e=>console.error("meal notification",e)));
   }
 };

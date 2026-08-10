@@ -15,12 +15,22 @@ async function api(path,opt={}) {
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
 function b64(v){const p="=".repeat((4-v.length%4)%4),s=(v+p).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from([...atob(s)].map(c=>c.charCodeAt(0)))}
 
-let config=null,status=null,activeTab="all";
+let config=null,status=null,activeTab="all",mealWeeks=[];
 const LATEST_POST_LIMIT=10;
 const MEALS={breakfast:"조식",lunch:"중식",dinner:"석식"};
 
 function todayInSeoul(){
   return new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+}
+function shortDate(date){
+  const [year,month,day]=date.split("-").map(Number);
+  const weekday=["일","월","화","수","목","금","토"][new Date(Date.UTC(year,month-1,day)).getUTCDay()];
+  return `${month}/${day}(${weekday})`;
+}
+function cornerHtml(corners){
+  return Object.entries(corners).map(([corner,items])=>
+    `<div class="corner-line">${corner==="menu"?"":`<b>${esc(corner)}</b> `}${items.map(esc).join(", ")}</div>`
+  ).join("");
 }
 function renderMeal(meal){
   const date=todayInSeoul();
@@ -29,12 +39,55 @@ function renderMeal(meal){
   if(!restaurants.length){$("#meal").innerHTML='<div class="empty">오늘 등록된 식단이 없습니다.</div>';return}
   $("#meal").innerHTML=restaurants.map(r=>`<div class="restaurant"><strong>${esc(r.name)}</strong>${Object.entries(MEALS).map(([key,label])=>{
     const corners=r.day[key]; if(!corners)return "";
-    const menu=Object.entries(corners).map(([corner,items])=>`${corner==="menu"?"":`<b>${esc(corner)}</b> `}${items.map(esc).join(", ")}`).join(" · ");
-    return `<div class="meal-row"><span class="meal-label">${label}</span><span>${menu}</span></div>`;
+    return `<div class="meal-row"><span class="meal-label">${label}</span><div>${cornerHtml(corners)}</div></div>`;
   }).join("")}</div>`).join("");
 }
+function renderWeeklyMeal(){
+  const selected=$("#mealWeek").value;
+  const meal=mealWeeks.find(value=>value.weekStart===selected)||mealWeeks.at(-1);
+  if(!meal){$("#weeklyMeal").innerHTML='<div class="empty">저장된 주간 식단이 없습니다.</div>';return}
+  const dates=[...new Set(meal.restaurants.flatMap(restaurant=>Object.keys(restaurant.days||{})))]
+    .filter(date=>date>=meal.weekStart&&date<=meal.weekEnd).sort();
+  $("#weeklyMeal").innerHTML=dates.map(date=>{
+    const restaurants=meal.restaurants.map(restaurant=>({name:restaurant.restaurant,day:restaurant.days?.[date]}))
+      .filter(restaurant=>restaurant.day&&Object.keys(restaurant.day).length);
+    if(!restaurants.length)return "";
+    return `<section class="week-day"><h3>${esc(shortDate(date))}</h3>${restaurants.map(restaurant=>
+      `<div class="week-restaurant"><strong>${esc(restaurant.name)}</strong>${Object.entries(MEALS).map(([key,label])=>{
+        const corners=restaurant.day[key];
+        return corners?`<div class="meal-row"><span class="meal-label">${label}</span><div>${cornerHtml(corners)}</div></div>`:"";
+      }).join("")}</div>`
+    ).join("")}</section>`;
+  }).join("")||'<div class="empty">이 주에 등록된 식단이 없습니다.</div>';
+}
+function renderMealWeeks(){
+  const select=$("#mealWeek");
+  const previous=select.value;
+  const today=todayInSeoul();
+  select.innerHTML=mealWeeks.map(meal=>
+    `<option value="${esc(meal.weekStart)}">${esc(shortDate(meal.weekStart))} ~ ${esc(shortDate(meal.weekEnd))}</option>`
+  ).join("");
+  const preferred=mealWeeks.find(meal=>meal.weekStart===previous)
+    ||mealWeeks.find(meal=>meal.weekStart<=today&&meal.weekEnd>=today)
+    ||mealWeeks.at(-1);
+  if(preferred)select.value=preferred.weekStart;
+  const latest=mealWeeks.at(-1);
+  if(latest?.pdfUrl)$("#mealPdfUrl").placeholder=latest.pdfUrl;
+  renderWeeklyMeal();
+}
 async function loadMeal(){
-  try{renderMeal(await api("/api/meal"))}catch(e){$("#mealDate").textContent="";$("#meal").innerHTML=`<div class="empty">${esc(e.message)}</div>`}
+  try{
+    const data=await api("/api/meals");
+    mealWeeks=data.weeks||[];
+    const today=todayInSeoul();
+    renderMeal(mealWeeks.find(meal=>meal.weekStart<=today&&meal.weekEnd>=today));
+    renderMealWeeks();
+  }catch(e){
+    mealWeeks=[];
+    $("#mealDate").textContent="";
+    $("#meal").innerHTML=`<div class="empty">${esc(e.message)}</div>`;
+    $("#weeklyMeal").innerHTML=`<div class="empty">${esc(e.message)}</div>`;
+  }
 }
 function renderMealSettings(settings){
   $("#mealSettings").innerHTML=Object.entries(MEALS).map(([key,label])=>{
@@ -142,6 +195,11 @@ $("#check").onclick=async()=>{try{await api("/api/check",{method:"POST"});await 
 $("#push").onclick=()=>pushSetup().catch(e=>alert(e.message));
 $("#test").onclick=()=>api("/api/push/test",{method:"POST"}).catch(e=>alert(e.message));
 $("#mealTest").onclick=()=>api("/api/push/meal-test",{method:"POST",body:JSON.stringify({meal:$("#testMeal").value})}).then(()=>alert("식단 테스트 알림을 보냈습니다.")).catch(e=>alert(e.message));
-$("#refreshMeal").onclick=()=>api("/api/meal/refresh",{method:"POST",body:JSON.stringify({force:true})}).then(loadMeal).catch(e=>alert(e.message));
+$("#mealWeek").onchange=renderWeeklyMeal;
+$("#refreshMeal").onclick=()=>{
+  const pdfUrl=$("#mealPdfUrl").value.trim();
+  return api("/api/meal/refresh",{method:"POST",body:JSON.stringify({force:true,...(pdfUrl?{pdfUrl}:{})})})
+    .then(()=>{$("#mealPdfUrl").value="";return loadMeal()}).catch(e=>alert(e.message));
+};
 $("#saveSettings").onclick=()=>saveSettings().catch(e=>alert(e.message));
 load().catch(e=>{console.error(e);$("#statusText").textContent=e.message});
