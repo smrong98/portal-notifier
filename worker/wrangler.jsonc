@@ -21,7 +21,7 @@
     "PORTAL_LOGIN_URL": "https://dnsep.dncompany.com/ldloginproc.do",
     "PORTAL_BOARD_API_URL": "https://dnsep.dncompany.com/board/selectBoardTopFive.do",
     // 주간 PDF URL을 고정 배포할 때 설정합니다. API 요청의 pdfUrl로도 전달할 수 있습니다.
-    "MEAL_PDF_URL": "",
+    "MEAL_PDF_URL": "https://dnsep.dncompany.com/privatefiles/public/CN99999/board/7dbe6683-5659-49c3-adee-20a5bc5ba0dc/b997b7eb-5660-4d9d-95b9-3da4d7e7d89c.pdf",
     "APP_URL": "https://smrong98.github.io/portal-notifier/",
     "ALLOWED_ORIGIN": "https://smrong98.github.io"
   },
