@@ -68,3 +68,18 @@ test("주차별 식단은 최근 3주를 보관하고 날짜에 맞는 주차를
   assert.equal((await getMeal(archiveEnv, "2026-08-12")).weekStart, "2026-08-10");
   assert.equal(await archiveEnv.PORTAL_KV.get("meal_week:2026-07-27", "json"), null);
 });
+
+test("토요일에 다음 주 식단이 저장돼 있어도 지난 주 식단을 반환한다", async () => {
+  const archiveEnv = { PORTAL_KV: new MemoryKV() };
+  await saveMealWeek(archiveEnv, {
+    ...meal("2026-08-10"),
+    weekEnd: "2026-08-14"
+  });
+  await saveMealWeek(archiveEnv, {
+    ...meal("2026-08-17"),
+    weekEnd: "2026-08-21"
+  });
+
+  assert.equal((await getMeal(archiveEnv, "2026-08-15")).weekStart, "2026-08-10");
+  assert.equal((await getMeal(archiveEnv, "2026-08-16")).weekStart, "2026-08-10");
+});

@@ -22,10 +22,11 @@ function defaultSettings() {
   return {
     restaurant: "namsan",
     timezone: "Asia/Seoul",
+    weekendNotifications: true,
     mealNotifications: {
-      breakfast: { enabled: true, time: "07:30" },
-      lunch: { enabled: true, time: "11:30" },
-      dinner: { enabled: true, time: "17:30" }
+      breakfast: { enabled: true, time: "07:00" },
+      lunch: { enabled: true, time: "11:00" },
+      dinner: { enabled: true, time: "16:30" }
     }
   };
 }
@@ -66,11 +67,18 @@ function datesInWeek(meal) {
   return result;
 }
 
+function effectiveWeekEnd(meal) {
+  const sunday = new Date(Date.parse(`${meal.weekStart}T00:00:00Z`) + 6 * 86400000).toISOString().slice(0, 10);
+  return meal.weekEnd > sunday ? meal.weekEnd : sunday;
+}
+
 function renderMeal() {
   const today = todayInSeoul();
+  const chronologicalMeals = [...bootstrap.meals].sort((a, b) => a.weekStart.localeCompare(b.weekStart));
   const meal = bootstrap.meals.find(item => item.weekStart === selectedWeekStart)
     || bootstrap.meals.find(item => item.weekStart <= today && item.weekEnd >= today)
-    || bootstrap.meals.at(-1);
+    || chronologicalMeals.findLast(item => item.weekStart <= today)
+    || chronologicalMeals[0];
   if (!meal) {
     $("#mealContent").innerHTML = '<div class="empty">아직 등록된 식단이 없습니다.</div>';
     $("#updatedAt").textContent = "업데이트 대기";
@@ -78,10 +86,13 @@ function renderMeal() {
   }
   selectedWeekStart = meal.weekStart;
   const dates = datesInWeek(meal);
-  if (!selectedDate || !dates.includes(selectedDate)) selectedDate = dates.includes(today) ? today : dates[0];
+  if (!selectedDate || !dates.includes(selectedDate)) {
+    selectedDate = dates.includes(today) ? today : today > meal.weekEnd ? dates.at(-1) : dates[0];
+  }
 
   $("#weekTabs").innerHTML = bootstrap.meals.map(item => {
-    const relation = item.weekStart <= today && item.weekEnd >= today ? "이번 주" : item.weekEnd < today ? "지난 주" : "다음 주";
+    const displayEnd = effectiveWeekEnd(item);
+    const relation = item.weekStart <= today && displayEnd >= today ? "이번 주" : displayEnd < today ? "지난 주" : "다음 주";
     return `<button class="tab${item.weekStart === selectedWeekStart ? " active" : ""}" data-week="${item.weekStart}">${relation} ${formatDate(item.weekStart)}~${formatDate(item.weekEnd)}</button>`;
   }).join("");
   $("#weekTabs").querySelectorAll("[data-week]").forEach(button => {
@@ -125,6 +136,7 @@ function renderSettings() {
       <label class="field"><input type="time" data-time="${mealKey}" value="${escapeHtml(value.time)}" aria-label="${label} 알림 시각"></label>
     </div>`;
   }).join("");
+  $("#weekendNotifications").checked = settings.weekendNotifications !== false;
   renderConnectionState();
 }
 
@@ -132,6 +144,7 @@ function collectSettings() {
   return {
     restaurant: $("#restaurant").value,
     timezone: "Asia/Seoul",
+    weekendNotifications: $("#weekendNotifications").checked,
     mealNotifications: Object.fromEntries(Object.keys(MEALS).map(mealKey => [mealKey, {
       enabled: Boolean(document.querySelector(`[data-enabled="${mealKey}"]`)?.checked),
       time: document.querySelector(`[data-time="${mealKey}"]`)?.value

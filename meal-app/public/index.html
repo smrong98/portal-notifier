@@ -34,7 +34,8 @@
       </div>
     </section>
 
-    <section class="card" aria-labelledby="notification-heading">
+    <details class="card settings-card">
+      <summary class="settings-summary" aria-labelledby="notification-heading">
       <div class="section-heading">
         <div>
           <p class="eyebrow">NOTIFICATION</p>
@@ -42,6 +43,8 @@
         </div>
         <span id="notificationState" class="badge muted">연결 안 됨</span>
       </div>
+      </summary>
+      <div class="settings-body">
 
       <label class="field">
         <span>알림 받을 지점</span>
@@ -49,6 +52,14 @@
       </label>
 
       <div id="mealSettings" class="meal-settings"></div>
+
+      <div class="weekend-setting">
+        <label class="toggle">
+          <input id="weekendNotifications" type="checkbox" checked>
+          <span>주말에도 알림 받기</span>
+        </label>
+        <p class="hint">끄면 토요일과 일요일에는 식사 알림을 보내지 않습니다.</p>
+      </div>
 
       <p class="hint">알림 시각이 지난 뒤 처음 실행되는 5분 주기에 발송됩니다. 기기나 브라우저 설정에 따라 조금 늦게 도착할 수 있습니다.</p>
 
@@ -59,7 +70,8 @@
         <button id="disableNotifications" type="button" class="danger ghost">알림 해제</button>
       </div>
       <div id="message" class="message" role="status" aria-live="polite"></div>
-    </section>
+      </div>
+    </details>
 
     <footer>식단 정보만 제공하며 포탈 계정과 게시판 데이터는 저장하지 않습니다.</footer>
   </main>

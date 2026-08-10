@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  isWeekendDate,
   localDateTime,
+  mealForDate,
   mealNotification,
   sanitizeMeal,
   sanitizeSettings
@@ -44,8 +46,19 @@ test("사용자 설정은 두 지점과 올바른 시각만 허용한다", () =>
     }
   });
   assert.equal(result.restaurant, "namsan");
-  assert.deepEqual(result.mealNotifications.breakfast, { enabled: false, time: "07:30" });
+  assert.equal(result.weekendNotifications, true);
+  assert.deepEqual(result.mealNotifications.breakfast, { enabled: false, time: "07:00" });
   assert.deepEqual(result.mealNotifications.lunch, { enabled: true, time: "12:05" });
+  assert.equal(sanitizeSettings({ weekendNotifications: false }).weekendNotifications, false);
+});
+
+test("토요일에 다음 주 식단이 있어도 지난 주 식단을 선택한다", () => {
+  const previous = { weekStart: "2026-08-10", weekEnd: "2026-08-14" };
+  const next = { weekStart: "2026-08-17", weekEnd: "2026-08-21" };
+  assert.equal(mealForDate([next, previous], "2026-08-15"), previous);
+  assert.equal(isWeekendDate("2026-08-15"), true);
+  assert.equal(isWeekendDate("2026-08-16"), true);
+  assert.equal(isWeekendDate("2026-08-17"), false);
 });
 
 test("서울 현지 날짜와 시간을 예약 조회 형식으로 반환한다", () => {

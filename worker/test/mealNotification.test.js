@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   formatMealNotification,
+  isMealRefreshCron,
   localDateTime,
-  mealForDate,
-  shouldRefreshMeal
+  mealForDate
 } from "../src/index.js";
 
 test("서울 시간대의 날짜와 시간을 알림 비교 형식으로 만든다", () => {
@@ -34,8 +34,7 @@ test("알림 본문은 지점명 없이 코너별로 줄바꿈한다", () => {
   ].join("\n"));
 });
 
-test("식단 PDF는 서울 시간 기준 금요일과 토요일에 갱신한다", () => {
-  assert.equal(shouldRefreshMeal(new Date("2026-08-07T03:00:00Z")), true);
-  assert.equal(shouldRefreshMeal(new Date("2026-08-08T03:00:00Z")), true);
-  assert.equal(shouldRefreshMeal(new Date("2026-08-09T03:00:00Z")), false);
+test("식단 PDF는 토요일 전용 Cron에서만 갱신한다", () => {
+  assert.equal(isMealRefreshCron("0 0 * * SAT"), true);
+  assert.equal(isMealRefreshCron("*/5 * * * *"), false);
 });

@@ -12,10 +12,11 @@ export const RESTAURANTS = Object.freeze([
 export const DEFAULT_SETTINGS = Object.freeze({
   restaurant: "namsan",
   timezone: "Asia/Seoul",
+  weekendNotifications: true,
   mealNotifications: {
-    breakfast: { enabled: true, time: "07:30" },
-    lunch: { enabled: true, time: "11:30" },
-    dinner: { enabled: true, time: "17:30" }
+    breakfast: { enabled: true, time: "07:00" },
+    lunch: { enabled: true, time: "11:00" },
+    dinner: { enabled: true, time: "16:30" }
   }
 });
 
@@ -92,6 +93,8 @@ export function sanitizeSettings(value = {}) {
     restaurant: RESTAURANTS.some(item => item.key === source.restaurant)
       ? source.restaurant : DEFAULT_SETTINGS.restaurant,
     timezone: "Asia/Seoul",
+    weekendNotifications: source.weekendNotifications === undefined
+      ? DEFAULT_SETTINGS.weekendNotifications : Boolean(source.weekendNotifications),
     mealNotifications: Object.fromEntries(Object.entries(MEALS).map(([mealKey]) => {
       const incoming = notifications[mealKey] ?? {};
       const fallback = DEFAULT_SETTINGS.mealNotifications[mealKey];
@@ -117,8 +120,18 @@ export function localDateTime(date = new Date(), timezone = "Asia/Seoul") {
 }
 
 export function mealForDate(meals, date) {
-  const weeks = Array.isArray(meals) ? meals : [];
-  return weeks.find(meal => meal.weekStart <= date && meal.weekEnd >= date) ?? weeks.at(-1) ?? null;
+  const weeks = Array.isArray(meals)
+    ? [...meals].sort((a, b) => a.weekStart.localeCompare(b.weekStart)) : [];
+  return weeks.find(meal => meal.weekStart <= date && meal.weekEnd >= date)
+    ?? weeks.findLast(meal => meal.weekStart <= date)
+    ?? weeks[0]
+    ?? null;
+}
+
+export function isWeekendDate(date) {
+  if (!ISO_DATE.test(date ?? "")) return false;
+  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return weekday === 0 || weekday === 6;
 }
 
 export function mealNotification(meal, date, mealKey, restaurantKey) {

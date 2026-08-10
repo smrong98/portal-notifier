@@ -7,6 +7,7 @@ const SETTINGS_KEY = "settings";
 const STATE_KEY = "monitor_state";
 const SUBSCRIPTIONS_KEY = "push_subscriptions";
 const MEAL_NOTIFICATION_STATE_KEY = "meal_notification_state";
+export const MEAL_REFRESH_CRON = "0 0 * * SAT";
 const MEAL_RESTAURANTS = {
   namsan: "DN솔루션즈 남산점",
   seongju: "DN솔루션즈 성주점"
@@ -20,9 +21,9 @@ const DEFAULT_SETTINGS = {
   timezone: "Asia/Seoul",
   mealRestaurant: "namsan",
   mealNotifications: {
-    breakfast: { enabled: true, time: "07:30" },
-    lunch: { enabled: true, time: "11:30" },
-    dinner: { enabled: true, time: "17:30" }
+    breakfast: { enabled: true, time: "07:00" },
+    lunch: { enabled: true, time: "11:00" },
+    dinner: { enabled: true, time: "16:30" }
   },
   enabledBoards: BOARDS.map(b => b.key)
 };
@@ -320,9 +321,8 @@ export function formatMealNotification(restaurants) {
   return restaurants.flatMap(restaurant => restaurant.menu).join("\n");
 }
 
-export function shouldRefreshMeal(date = new Date(), timezone = "Asia/Seoul") {
-  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(date);
-  return weekday === "Fri" || weekday === "Sat";
+export function isMealRefreshCron(cron) {
+  return cron === MEAL_REFRESH_CRON;
 }
 
 async function publishMeal(env, result) {
@@ -542,13 +542,16 @@ export default {
     try { return withCors(await api(request,env),request,env); }
     catch(e) { return withCors(json({error:String(e?.message||e)},500),request,env); }
   },
-  async scheduled(_c,env,ctx) {
+  async scheduled(controller,env,ctx) {
+    if (isMealRefreshCron(controller.cron)) {
+      ctx.waitUntil(
+        refreshMeal(env, { force: true })
+          .then(({ result }) => publishMeal(env, result))
+          .catch(e=>console.error("meal refresh",e))
+      );
+      return;
+    }
     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
-    if (shouldRefreshMeal()) ctx.waitUntil(
-      refreshMeal(env)
-        .then(({ cached, result }) => cached ? null : publishMeal(env, result))
-        .catch(e=>console.error("meal refresh",e))
-    );
     ctx.waitUntil(notifyDueMeals(env).catch(e=>console.error("meal notification",e)));
   }
 };

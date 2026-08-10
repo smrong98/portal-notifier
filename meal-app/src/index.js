@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import {
   DEFAULT_SETTINGS,
+  isWeekendDate,
   MEALS,
   RESTAURANTS,
   localDateTime,
@@ -102,6 +103,7 @@ function settingsFromRow(row) {
   return {
     restaurant: row.restaurant,
     timezone: row.timezone,
+    weekendNotifications: Boolean(row.weekend_enabled),
     mealNotifications: Object.fromEntries(Object.keys(MEALS).map(mealKey => [mealKey, {
       enabled: Boolean(row[`${mealKey}_enabled`]),
       time: row[`${mealKey}_time`]
@@ -140,16 +142,17 @@ async function createSubscription(request, env) {
     await env.DB.prepare(`UPDATE subscriptions SET
       management_token_hash = ?, p256dh = ?, auth = ?, restaurant = ?, timezone = ?,
       breakfast_enabled = ?, breakfast_time = ?, lunch_enabled = ?, lunch_time = ?,
-      dinner_enabled = ?, dinner_time = ?, updated_at = ? WHERE id = ?`)
-      .bind(hash, push.p256dh, push.auth, settings.restaurant, settings.timezone, ...values, now, id).run();
+      dinner_enabled = ?, dinner_time = ?, weekend_enabled = ?, updated_at = ? WHERE id = ?`)
+      .bind(hash, push.p256dh, push.auth, settings.restaurant, settings.timezone, ...values,
+        settings.weekendNotifications ? 1 : 0, now, id).run();
   } else {
     await env.DB.prepare(`INSERT INTO subscriptions (
       id, management_token_hash, endpoint, p256dh, auth, restaurant, timezone,
       breakfast_enabled, breakfast_time, lunch_enabled, lunch_time,
-      dinner_enabled, dinner_time, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      dinner_enabled, dinner_time, weekend_enabled, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(id, hash, push.endpoint, push.p256dh, push.auth, settings.restaurant, settings.timezone,
-        ...values, now, now).run();
+        ...values, settings.weekendNotifications ? 1 : 0, now, now).run();
   }
   return json({ id, managementToken, settings }, 201);
 }
@@ -160,8 +163,9 @@ async function updateSubscription(request, env, id) {
   const now = new Date().toISOString();
   await env.DB.prepare(`UPDATE subscriptions SET restaurant = ?, timezone = ?,
     breakfast_enabled = ?, breakfast_time = ?, lunch_enabled = ?, lunch_time = ?,
-    dinner_enabled = ?, dinner_time = ?, updated_at = ? WHERE id = ?`)
-    .bind(settings.restaurant, settings.timezone, ...settingsValues(settings), now, row.id).run();
+    dinner_enabled = ?, dinner_time = ?, weekend_enabled = ?, updated_at = ? WHERE id = ?`)
+    .bind(settings.restaurant, settings.timezone, ...settingsValues(settings),
+      settings.weekendNotifications ? 1 : 0, now, row.id).run();
   return json({ ok: true, settings });
 }
 
@@ -284,12 +288,14 @@ async function enqueueDueMeal(env, local, mealKey) {
   const [enabledColumn, timeColumn] = dueColumns[mealKey];
   const result = await env.DB.prepare(`SELECT s.id FROM subscriptions s
     WHERE s.${enabledColumn} = 1 AND s.${timeColumn} <= ?
+      AND (? = 0 OR s.weekend_enabled = 1)
       AND unixepoch(s.updated_at) <= unixepoch(? || 'T' || s.${timeColumn} || ':00', '-9 hours')
       AND NOT EXISTS (
         SELECT 1 FROM deliveries d
         WHERE d.subscription_id = s.id AND d.meal_date = ? AND d.meal_type = ?
       )
-    LIMIT ?`).bind(local.time, local.date, local.date, mealKey, MAX_DUE_PER_MEAL).all();
+    LIMIT ?`).bind(local.time, isWeekendDate(local.date) ? 1 : 0,
+      local.date, local.date, mealKey, MAX_DUE_PER_MEAL).all();
   const ids = result.results.map(row => row.id);
   if (!ids.length) return 0;
 

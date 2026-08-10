@@ -33,6 +33,9 @@ export async function getMeal(env, date) {
   if (date) {
     const matching = weeks.find(meal => meal.weekStart <= date && meal.weekEnd >= date);
     if (matching) return matching;
+    const previous = weeks.findLast(meal => meal.weekStart <= date);
+    if (previous) return previous;
+    return weeks[0];
   }
   return weeks.at(-1);
 }
