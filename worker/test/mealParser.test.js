@@ -48,3 +48,19 @@ test("페이지별 식당을 유지하고 연말을 넘는 날짜의 연도를 �
   assert.equal(result.restaurants[1].restaurant, "DN솔루션즈 성주점");
   assert.equal(result.weekEnd, "2027-01-01");
 });
+
+test("성주점 표 밖 안내문과 메뉴가 없는 칸의 연락처를 제외한다", () => {
+  const pages = [{ pageNumber: 1, items: [
+    item("DN솔루션즈성주점", 20, 800), item("8/10(월)", 150, 750), item("8/15(토)", 350, 750),
+    item("중식", 20, 600), item("점심메뉴", 150, 560), item("토요일점심", 350, 560),
+    item("추가코너", 20, 500),
+    item("석식", 20, 400), item("저녁메뉴", 150, 450), item("반찬", 150, 430),
+    item("별도", 150, 120), item("게시", 150, 100), item("된", 150, 80), item("일일메뉴표를", 150, 60),
+    item("소중한", 350, 120), item("의견", 350, 100), item("및", 350, 80), item("문의", 350, 60),
+    item("lee.minhwan", 350, 40), item("@ourhome.co.kr", 350, 20)
+  ] }];
+
+  const result = structureMealText(pages, { referenceDate: "2026-08-10T00:00:00Z" });
+  assert.deepEqual(result.restaurants[0].days["2026-08-10"].dinner.menu, ["저녁메뉴", "반찬"]);
+  assert.equal(result.restaurants[0].days["2026-08-15"].dinner, undefined);
+});

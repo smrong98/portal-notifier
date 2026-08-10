@@ -7,6 +7,7 @@ const MEALS = new Map([
 const CORNER_PATTERN = /^corner\s*[\d,./&-]+$/i;
 const EXCLUDED_SECTION_PATTERN = /^(?:plus\s*bar|후식|추가\s*코너)$/i;
 const NUMBER_PATTERN = /^\d+(?:[.,]\d+)?$/;
+const NON_MENU_TEXT_PATTERN = /^(?:별도|게시|된|일일메뉴표를|참고|해|주시기|바랍니다|소중한|의견|및|문의|lee\.minhwan|@ourhome\.co\.kr|\.)$/i;
 const SECTION_LINE_TOLERANCE = 3;
 
 const clean = value => String(value || "").replace(/\s+/g, " ").trim();
@@ -112,6 +113,7 @@ function parsePage(page, referenceDate) {
           : row.bottom;
         const menu = area.filter(item => item !== corner && !MEALS.has(item.str) && !DATE_PATTERN.test(item.str)
           && !CORNER_PATTERN.test(item.str) && !EXCLUDED_SECTION_PATTERN.test(item.str)
+          && !NON_MENU_TEXT_PATTERN.test(item.str)
           && !isExcludedSectionLine(item, excludedSections) && item.y <= top && item.y >= bottom
           && !(mealKey === "lunch" && NUMBER_PATTERN.test(item.str)))
           .sort((a, b) => b.y - a.y || a.x - b.x).map(item => item.str);

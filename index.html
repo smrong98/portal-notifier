@@ -18,8 +18,10 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
 .check{display:flex;gap:9px;align-items:center;padding:8px 0}.check input{width:20px;height:20px;margin:0}.times{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tabs{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px}.tab{white-space:nowrap;background:#e5e7eb;color:#374151;padding:8px 11px}.tab.active{background:#111827;color:#fff}
 .post{display:block;padding:13px 0;border-bottom:1px solid #f1f5f9;color:inherit;text-decoration:none}.post:last-child{border-bottom:0}.board{font-size:11px;color:#6b7280}.title{font-size:15px;font-weight:650;line-height:1.42;margin-top:3px}.date{font-size:11px;color:#9ca3af;margin-top:5px}.empty{color:#9ca3af;font-size:13px;padding:8px 0}
-.meal-date{font-size:13px;color:#6b7280;margin:-4px 0 12px}.restaurant{border-top:1px solid #f1f5f9;padding:12px 0}.restaurant:first-child{border-top:0;padding-top:0}.restaurant strong{display:block;margin-bottom:7px}.meal-row{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:13px;line-height:1.55;margin-top:5px}.meal-label{color:#6b7280;font-weight:700}.meal-setting{display:grid;grid-template-columns:1fr 125px;align-items:center;gap:10px}.meal-setting .check{margin:0}.meal-setting .field{margin:5px 0}
-.corner-line+.corner-line{margin-top:5px}.week-day{border-top:1px solid #e5e7eb;padding:14px 0}.week-day:first-child{border-top:0;padding-top:2px}.week-day h3{font-size:15px;margin:0 0 10px}.week-restaurant{background:#f8fafc;border-radius:12px;padding:11px;margin-top:8px}.week-restaurant>strong{font-size:13px}.week-select{margin:0 0 12px}.pdf-update{margin-top:16px;padding-top:14px;border-top:1px solid #e5e7eb}
+.meal-date{font-size:14px;color:#374151;font-weight:700;margin:9px 0}.restaurant{border-top:1px solid #f1f5f9;padding:12px 0}.restaurant:first-child{border-top:0;padding-top:0}.restaurant strong{display:block;margin-bottom:7px}.meal-row{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:13px;line-height:1.55;margin-top:5px}.meal-label{color:#6b7280;font-weight:700}.meal-setting{display:grid;grid-template-columns:1fr 125px;align-items:center;gap:10px}.meal-setting .check{margin:0}.meal-setting .field{margin:5px 0}
+.corner-line+.corner-line{margin-top:5px}.meal-nav{margin-bottom:10px}.meal-nav+.meal-nav{padding-top:2px}.day-tabs{display:grid;grid-template-columns:repeat(7,minmax(48px,1fr));gap:5px;overflow:visible}.day-tab{min-width:0;padding:7px 4px;display:flex;flex-direction:column;gap:2px;align-items:center}.day-tab small{font-size:11px;font-weight:600}.pdf-update{margin-top:6px}
+.settings-card{padding:0;overflow:hidden}.settings-card>summary{cursor:pointer;list-style:none;padding:17px;font-size:16px;font-weight:800}.settings-card>summary::-webkit-details-marker{display:none}.settings-card>summary::after{content:"펼치기";float:right;color:#6b7280;font-size:12px;font-weight:600}.settings-card[open]>summary::after{content:"접기"}.settings-body{padding:0 17px 17px;border-top:1px solid #f1f5f9}.settings-tabs{padding-top:14px}.settings-panel{padding-top:4px}.settings-panel h3{font-size:14px;margin:10px 0}.settings-save{margin-top:18px;padding-top:14px;border-top:1px solid #e5e7eb}
+@media(max-width:480px){.day-tabs{grid-template-columns:repeat(7,minmax(40px,1fr))}.day-tab{font-size:12px}.meal-row{grid-template-columns:38px 1fr}}
 </style>
 </head>
 <body><main>
@@ -33,20 +35,13 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
 </section>
 
 <section class="card">
-  <h2>오늘의 식단</h2>
+  <h2>식단 조회</h2>
+  <div class="hint">주차</div>
+  <div id="mealWeeks" class="tabs meal-nav"></div>
+  <div class="hint">요일</div>
+  <div id="mealDays" class="day-tabs meal-nav"></div>
   <div id="mealDate" class="meal-date"></div>
   <div id="meal"><div class="empty">불러오는 중...</div></div>
-</section>
-
-<section class="card">
-  <h2>주간 식단</h2>
-  <label class="field week-select">조회할 주차<select id="mealWeek"></select></label>
-  <div id="weeklyMeal"><div class="empty">불러오는 중...</div></div>
-  <div class="pdf-update">
-    <label class="field">새 식단표 PDF 링크<input id="mealPdfUrl" type="url" inputmode="url" placeholder="포탈 PDF 링크를 붙여넣으세요"></label>
-    <div class="hint">금요일이나 토요일에 새 링크를 등록하면 이전 주 식단은 유지되고 다음 주 식단이 추가됩니다.</div>
-    <div class="actions"><button id="refreshMeal" class="secondary">식단표 업데이트</button></div>
-  </div>
 </section>
 
 <section class="card">
@@ -55,40 +50,65 @@ button{border:0;border-radius:12px;padding:11px 13px;background:#111827;color:#f
   <div id="latest"><div class="empty">불러오는 중...</div></div>
 </section>
 
-<section class="card">
-  <h2>앱 연결</h2>
-  <label class="field">개인 앱 키<input id="clientKey" type="password" autocomplete="off"></label>
-  <div class="actions">
-    <button id="saveKey" class="secondary">앱 키 저장</button>
-    <button id="push">알림 허용</button>
-    <button id="test" class="secondary">최신 글 테스트 알림</button>
-  </div>
-</section>
+<details class="card settings-card">
+  <summary>설정</summary>
+  <div class="settings-body">
+    <div class="tabs settings-tabs">
+      <button class="tab active" data-settings-tab="connection">앱 연결</button>
+      <button class="tab" data-settings-tab="notifications">알림</button>
+      <button class="tab" data-settings-tab="boards">게시판</button>
+      <button class="tab" data-settings-tab="meal-pdf">식단표</button>
+    </div>
 
-<section class="card">
-  <h2>알림 설정</h2>
-  <label class="field">확인 주기
-    <select id="interval"><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option><option value="60">60분</option></select>
-  </label>
-  <label class="check"><input id="quietEnabled" type="checkbox"><span>방해금지 사용</span></label>
-  <div class="times">
-    <label class="field">시작<input id="quietStart" type="time"></label>
-    <label class="field">종료<input id="quietEnd" type="time"></label>
-  </div>
-  <div class="hint">식단 알림 시간</div>
-  <div id="mealSettings"></div>
-  <div class="actions">
-    <select id="testMeal" aria-label="테스트할 식사"><option value="breakfast">조식</option><option value="lunch" selected>중식</option><option value="dinner">석식</option></select>
-    <button id="mealTest" class="secondary">식단 테스트 알림</button>
-  </div>
-</section>
+    <section class="settings-panel" data-settings-panel="connection">
+      <h3>앱 연결</h3>
+      <label class="field">개인 앱 키<input id="clientKey" type="password" autocomplete="off"></label>
+      <div class="actions">
+        <button id="saveKey" class="secondary">앱 키 저장</button>
+        <button id="push">알림 허용</button>
+        <button id="test" class="secondary">최신 글 테스트 알림</button>
+      </div>
+    </section>
 
-<section class="card">
-  <h2>알림 받을 게시판</h2>
-  <div id="boards"></div>
-  <div class="actions"><button id="saveSettings">설정 저장</button></div>
-</section>
+    <section class="settings-panel" data-settings-panel="notifications" hidden>
+      <h3>알림 설정</h3>
+      <label class="field">식단 알림 지점
+        <select id="mealRestaurant"><option value="namsan">남산점</option><option value="seongju">성주점</option></select>
+      </label>
+      <label class="field">확인 주기
+        <select id="interval"><option value="5">5분</option><option value="10">10분</option><option value="15">15분</option><option value="30">30분</option><option value="60">60분</option></select>
+      </label>
+      <label class="check"><input id="quietEnabled" type="checkbox"><span>방해금지 사용</span></label>
+      <div class="times">
+        <label class="field">시작<input id="quietStart" type="time"></label>
+        <label class="field">종료<input id="quietEnd" type="time"></label>
+      </div>
+      <div class="hint">식단 알림 시간</div>
+      <div id="mealSettings"></div>
+      <div class="actions">
+        <select id="testMeal" aria-label="테스트할 식사"><option value="breakfast">조식</option><option value="lunch" selected>중식</option><option value="dinner">석식</option></select>
+        <button id="mealTest" class="secondary">식단 테스트 알림</button>
+      </div>
+    </section>
+
+    <section class="settings-panel" data-settings-panel="boards" hidden>
+      <h3>알림 받을 게시판</h3>
+      <div id="boards"></div>
+    </section>
+
+    <section class="settings-panel" data-settings-panel="meal-pdf" hidden>
+      <h3>식단표 업데이트</h3>
+      <div class="pdf-update">
+        <label class="field">새 식단표 PDF 링크<input id="mealPdfUrl" type="url" inputmode="url" placeholder="포탈 PDF 링크를 붙여넣으세요"></label>
+        <div class="hint">금요일이나 토요일에 새 링크를 등록하면 이전 주 식단은 유지되고 다음 주 식단이 추가됩니다.</div>
+        <div class="actions"><button id="refreshMeal" class="secondary">식단표 업데이트</button></div>
+      </div>
+    </section>
+
+    <div class="actions settings-save"><button id="saveSettings">설정 저장</button></div>
+  </div>
+</details>
 
 </main>
-<script src="./config.js"></script><script src="./app.js?v=20260810-2"></script>
+<script src="./config.js"></script><script src="./app.js?v=20260810-3"></script>
 </body></html>

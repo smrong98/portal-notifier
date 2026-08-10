@@ -7,6 +7,10 @@ const SETTINGS_KEY = "settings";
 const STATE_KEY = "monitor_state";
 const SUBSCRIPTIONS_KEY = "push_subscriptions";
 const MEAL_NOTIFICATION_STATE_KEY = "meal_notification_state";
+const MEAL_RESTAURANTS = {
+  namsan: "DN솔루션즈 남산점",
+  seongju: "DN솔루션즈 성주점"
+};
 
 const DEFAULT_SETTINGS = {
   intervalMinutes: 5,
@@ -14,6 +18,7 @@ const DEFAULT_SETTINGS = {
   quietStart: "22:00",
   quietEnd: "07:00",
   timezone: "Asia/Seoul",
+  mealRestaurant: "namsan",
   mealNotifications: {
     breakfast: { enabled: true, time: "07:30" },
     lunch: { enabled: true, time: "11:30" },
@@ -97,6 +102,8 @@ async function saveSettings(env, incoming) {
     quietStart: /^\d{2}:\d{2}$/.test(incoming.quietStart || "") ? incoming.quietStart : "22:00",
     quietEnd: /^\d{2}:\d{2}$/.test(incoming.quietEnd || "") ? incoming.quietEnd : "07:00",
     timezone: incoming.timezone || "Asia/Seoul",
+    mealRestaurant: Object.hasOwn(MEAL_RESTAURANTS, incoming.mealRestaurant)
+      ? incoming.mealRestaurant : DEFAULT_SETTINGS.mealRestaurant,
     mealNotifications: mealNotificationSettings(incoming),
     enabledBoards
   };
@@ -292,21 +299,25 @@ export function localDateTime(tz, date = new Date()) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
-export function mealForDate(meal, date, mealKey) {
-  const restaurants = (meal?.restaurants || []).map(restaurant => {
+export function mealForDate(meal, date, mealKey, restaurantKey) {
+  const selectedName = MEAL_RESTAURANTS[restaurantKey];
+  const restaurants = (meal?.restaurants || []).filter(restaurant =>
+    !selectedName || restaurant.restaurant === selectedName
+  ).map(restaurant => {
     const corners = restaurant.days?.[date]?.[mealKey];
     if (!corners) return null;
-    const menu = Object.entries(corners).flatMap(([corner, items]) =>
-      corner === "menu" ? items : [`${corner}: ${items.join(", ")}`]);
+    const menu = Object.entries(corners).map(([corner, items]) => {
+      const summary = items.slice(0, 2).join(", ");
+      const suffix = items.length > 2 ? ", ..." : "";
+      return `${corner === "menu" ? "" : `${corner}: `}${summary}${suffix}`;
+    }).filter(Boolean);
     return menu.length ? { name: restaurant.restaurant, menu } : null;
   }).filter(Boolean);
   return restaurants;
 }
 
 export function formatMealNotification(restaurants) {
-  return restaurants.map(restaurant =>
-    `[${restaurant.name}]\n${restaurant.menu.join("\n")}`
-  ).join("\n\n");
+  return restaurants.flatMap(restaurant => restaurant.menu).join("\n");
 }
 
 export function shouldRefreshMeal(date = new Date(), timezone = "Asia/Seoul") {
@@ -314,9 +325,9 @@ export function shouldRefreshMeal(date = new Date(), timezone = "Asia/Seoul") {
   return weekday === "Fri" || weekday === "Sat";
 }
 
-async function sendMealPush(env, mealKey, date, { test = false } = {}) {
+async function sendMealPush(env, mealKey, date, { test = false, restaurant } = {}) {
   const meal = await getMeal(env, date);
-  const restaurants = mealForDate(meal, date, mealKey);
+  const restaurants = mealForDate(meal, date, mealKey, restaurant);
   const name = MEAL_NAMES[mealKey];
   const body = restaurants.length
     ? formatMealNotification(restaurants)
@@ -334,9 +345,9 @@ async function notifyDueMeals(env, date = new Date()) {
   const local = localDateTime(settings.timezone, date);
   const state = await env.PORTAL_KV.get(MEAL_NOTIFICATION_STATE_KEY, "json") || {};
   for (const [mealKey, notification] of Object.entries(settings.mealNotifications)) {
-    const deliveryKey = `${local.date}:${mealKey}`;
+    const deliveryKey = `${local.date}:${mealKey}:${settings.mealRestaurant}`;
     if (notification.enabled && local.time >= notification.time && !state[deliveryKey]) {
-      const result = await sendMealPush(env, mealKey, local.date);
+      const result = await sendMealPush(env, mealKey, local.date, { restaurant: settings.mealRestaurant });
       if (result.sent > 0) state[deliveryKey] = nowIso();
     }
   }
@@ -503,7 +514,10 @@ async function api(request,env) {
     const mealKey = Object.hasOwn(MEAL_NAMES, body.meal) ? body.meal : "lunch";
     const settings = await getSettings(env);
     const { date } = localDateTime(settings.timezone);
-    return json({ok:true,...await sendMealPush(env, mealKey, date, {test:true})});
+    return json({ok:true,...await sendMealPush(env, mealKey, date, {
+      test:true,
+      restaurant:settings.mealRestaurant
+    })});
   }
 
   return json({error:"Not found"},404);

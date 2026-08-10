@@ -15,7 +15,8 @@ async function api(path,opt={}) {
 function esc(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;")}
 function b64(v){const p="=".repeat((4-v.length%4)%4),s=(v+p).replace(/-/g,"+").replace(/_/g,"/");return Uint8Array.from([...atob(s)].map(c=>c.charCodeAt(0)))}
 
-let config=null,status=null,activeTab="all",mealWeeks=[];
+let config=null,status=null,activeTab="all",activeSettingsTab="connection",mealWeeks=[];
+let selectedWeekStart=null,selectedMealDate=null;
 const LATEST_POST_LIMIT=10;
 const MEALS={breakfast:"조식",lunch:"중식",dinner:"석식"};
 
@@ -32,61 +33,67 @@ function cornerHtml(corners){
     `<div class="corner-line">${corner==="menu"?"":`<b>${esc(corner)}</b> `}${items.map(esc).join(", ")}</div>`
   ).join("");
 }
-function renderMeal(meal){
-  const date=todayInSeoul();
-  $("#mealDate").textContent=new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",dateStyle:"full"}).format(new Date());
+function weekDates(meal){
+  const dates=[];
+  for(let time=Date.parse(`${meal.weekStart}T00:00:00Z`),end=Date.parse(`${meal.weekEnd}T00:00:00Z`);time<=end;time+=86400000){
+    dates.push(new Date(time).toISOString().slice(0,10));
+  }
+  return dates;
+}
+function renderMeal(meal,date){
+  $("#mealDate").textContent=date?shortDate(date):"";
   const restaurants=(meal?.restaurants||[]).map(r=>({name:r.restaurant,day:r.days?.[date]})).filter(r=>r.day&&Object.keys(r.day).length);
-  if(!restaurants.length){$("#meal").innerHTML='<div class="empty">오늘 등록된 식단이 없습니다.</div>';return}
+  if(!restaurants.length){$("#meal").innerHTML='<div class="empty">선택한 날짜에 등록된 식단이 없습니다.</div>';return}
   $("#meal").innerHTML=restaurants.map(r=>`<div class="restaurant"><strong>${esc(r.name)}</strong>${Object.entries(MEALS).map(([key,label])=>{
     const corners=r.day[key]; if(!corners)return "";
     return `<div class="meal-row"><span class="meal-label">${label}</span><div>${cornerHtml(corners)}</div></div>`;
   }).join("")}</div>`).join("");
 }
-function renderWeeklyMeal(){
-  const selected=$("#mealWeek").value;
-  const meal=mealWeeks.find(value=>value.weekStart===selected)||mealWeeks.at(-1);
-  if(!meal){$("#weeklyMeal").innerHTML='<div class="empty">저장된 주간 식단이 없습니다.</div>';return}
-  const dates=[...new Set(meal.restaurants.flatMap(restaurant=>Object.keys(restaurant.days||{})))]
-    .filter(date=>date>=meal.weekStart&&date<=meal.weekEnd).sort();
-  $("#weeklyMeal").innerHTML=dates.map(date=>{
-    const restaurants=meal.restaurants.map(restaurant=>({name:restaurant.restaurant,day:restaurant.days?.[date]}))
-      .filter(restaurant=>restaurant.day&&Object.keys(restaurant.day).length);
-    if(!restaurants.length)return "";
-    return `<section class="week-day"><h3>${esc(shortDate(date))}</h3>${restaurants.map(restaurant=>
-      `<div class="week-restaurant"><strong>${esc(restaurant.name)}</strong>${Object.entries(MEALS).map(([key,label])=>{
-        const corners=restaurant.day[key];
-        return corners?`<div class="meal-row"><span class="meal-label">${label}</span><div>${cornerHtml(corners)}</div></div>`:"";
-      }).join("")}</div>`
-    ).join("")}</section>`;
-  }).join("")||'<div class="empty">이 주에 등록된 식단이 없습니다.</div>';
+function weekButtonLabel(meal,today){
+  const relation=meal.weekStart<=today&&meal.weekEnd>=today?"이번 주":meal.weekEnd<today?"지난 주":"다음 주";
+  return `${relation} ${shortDate(meal.weekStart)}~${shortDate(meal.weekEnd)}`;
 }
-function renderMealWeeks(){
-  const select=$("#mealWeek");
-  const previous=select.value;
+function renderMealNavigation(){
   const today=todayInSeoul();
-  select.innerHTML=mealWeeks.map(meal=>
-    `<option value="${esc(meal.weekStart)}">${esc(shortDate(meal.weekStart))} ~ ${esc(shortDate(meal.weekEnd))}</option>`
-  ).join("");
-  const preferred=mealWeeks.find(meal=>meal.weekStart===previous)
+  const preferred=mealWeeks.find(meal=>meal.weekStart===selectedWeekStart)
     ||mealWeeks.find(meal=>meal.weekStart<=today&&meal.weekEnd>=today)
     ||mealWeeks.at(-1);
-  if(preferred)select.value=preferred.weekStart;
+  selectedWeekStart=preferred?.weekStart||null;
+  const weekWrap=$("#mealWeeks"); weekWrap.innerHTML="";
+  for(const meal of mealWeeks){
+    const button=document.createElement("button");
+    button.className="tab"+(meal.weekStart===selectedWeekStart?" active":"");
+    button.textContent=weekButtonLabel(meal,today);
+    button.onclick=()=>{selectedWeekStart=meal.weekStart;selectedMealDate=null;renderMealNavigation()};
+    weekWrap.appendChild(button);
+  }
+  const dates=preferred?weekDates(preferred):[];
+  selectedMealDate=dates.includes(selectedMealDate)?selectedMealDate:dates.includes(today)?today:dates[0];
+  const dayWrap=$("#mealDays"); dayWrap.innerHTML="";
+  for(const date of dates){
+    const button=document.createElement("button");
+    const day=shortDate(date).match(/\((.)\)$/)?.[1]||"";
+    const number=String(Number(date.slice(8,10)));
+    button.className="tab day-tab"+(date===selectedMealDate?" active":"");
+    button.innerHTML=`<span>${esc(day)}</span><small>${esc(number)}</small>`;
+    button.onclick=()=>{selectedMealDate=date;renderMealNavigation()};
+    dayWrap.appendChild(button);
+  }
   const latest=mealWeeks.at(-1);
   if(latest?.pdfUrl)$("#mealPdfUrl").placeholder=latest.pdfUrl;
-  renderWeeklyMeal();
+  renderMeal(preferred,selectedMealDate);
 }
 async function loadMeal(){
   try{
     const data=await api("/api/meals");
     mealWeeks=data.weeks||[];
-    const today=todayInSeoul();
-    renderMeal(mealWeeks.find(meal=>meal.weekStart<=today&&meal.weekEnd>=today));
-    renderMealWeeks();
+    renderMealNavigation();
   }catch(e){
     mealWeeks=[];
     $("#mealDate").textContent="";
     $("#meal").innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-    $("#weeklyMeal").innerHTML=`<div class="empty">${esc(e.message)}</div>`;
+    $("#mealWeeks").innerHTML="";
+    $("#mealDays").innerHTML="";
   }
 }
 function renderMealSettings(settings){
@@ -143,6 +150,15 @@ function renderStatus(){
   $("#lastError").textContent=status?.lastError||"";
   $("#lastError").style.display=status?.lastError?"block":"none";
 }
+function renderSettingsTabs(){
+  $$('[data-settings-tab]').forEach(button=>{
+    button.classList.toggle("active",button.dataset.settingsTab===activeSettingsTab);
+    button.onclick=()=>{activeSettingsTab=button.dataset.settingsTab;renderSettingsTabs()};
+  });
+  $$('[data-settings-panel]').forEach(panel=>{
+    panel.hidden=panel.dataset.settingsPanel!==activeSettingsTab;
+  });
+}
 async function load(){
   if(!key()){ $("#statusText").textContent="앱 키를 입력하세요"; return; }
   [config,status]=await Promise.all([api("/api/config"),api("/api/status")]);
@@ -151,6 +167,7 @@ async function load(){
   $("#quietEnabled").checked=s.quietEnabled;
   $("#quietStart").value=s.quietStart;
   $("#quietEnd").value=s.quietEnd;
+  $("#mealRestaurant").value=s.mealRestaurant||"namsan";
   renderMealSettings(s.mealNotifications);
   $("#boards").innerHTML="";
   for(const b of config.boards){
@@ -178,6 +195,7 @@ async function saveSettings(){
     quietStart:$("#quietStart").value,
     quietEnd:$("#quietEnd").value,
     timezone:"Asia/Seoul",
+    mealRestaurant:$("#mealRestaurant").value,
     mealNotifications:Object.fromEntries(Object.keys(MEALS).map(meal=>[meal,{
       enabled:Boolean($(`[data-meal="${meal}"]`)?.checked),
       time:$(`[data-meal-time="${meal}"]`)?.value
@@ -195,11 +213,11 @@ $("#check").onclick=async()=>{try{await api("/api/check",{method:"POST"});await 
 $("#push").onclick=()=>pushSetup().catch(e=>alert(e.message));
 $("#test").onclick=()=>api("/api/push/test",{method:"POST"}).catch(e=>alert(e.message));
 $("#mealTest").onclick=()=>api("/api/push/meal-test",{method:"POST",body:JSON.stringify({meal:$("#testMeal").value})}).then(()=>alert("식단 테스트 알림을 보냈습니다.")).catch(e=>alert(e.message));
-$("#mealWeek").onchange=renderWeeklyMeal;
 $("#refreshMeal").onclick=()=>{
   const pdfUrl=$("#mealPdfUrl").value.trim();
   return api("/api/meal/refresh",{method:"POST",body:JSON.stringify({force:true,...(pdfUrl?{pdfUrl}:{})})})
     .then(()=>{$("#mealPdfUrl").value="";return loadMeal()}).catch(e=>alert(e.message));
 };
 $("#saveSettings").onclick=()=>saveSettings().catch(e=>alert(e.message));
+renderSettingsTabs();
 load().catch(e=>{console.error(e);$("#statusText").textContent=e.message});
