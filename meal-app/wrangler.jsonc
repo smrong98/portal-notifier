@@ -1,0 +1,49 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "meal-notifier",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/health"]
+  },
+
+  // Wrangler가 첫 배포 때 KV와 D1을 자동 프로비저닝합니다.
+  "kv_namespaces": [
+    { "binding": "MEALS" }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meal-notifier-db",
+      "migrations_dir": "./migrations"
+    }
+  ],
+
+  "queues": {
+    "producers": [
+      { "binding": "PUSH_QUEUE", "queue": "meal-notifier-push" }
+    ],
+    "consumers": [
+      {
+        "queue": "meal-notifier-push",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "retry_delay": 60
+      }
+    ]
+  },
+
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}

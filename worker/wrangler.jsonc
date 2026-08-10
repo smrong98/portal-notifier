@@ -12,6 +12,14 @@
     }
   ],
 
+  "services": [
+    {
+      "binding": "MEAL_APP",
+      "service": "meal-notifier",
+      "entrypoint": "MealPublisher"
+    }
+  ],
+
   "triggers": {
     "crons": ["*/5 * * * *"]
   },

@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": ["src/**/*.js", "test/**/*.js", "worker-configuration.d.ts"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "오늘의 식단",
+  "short_name": "식단",
+  "description": "주간 식단 조회 및 식사 알림",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff7ed",
+  "theme_color": "#f97316",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

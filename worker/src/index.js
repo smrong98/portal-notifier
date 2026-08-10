@@ -325,6 +325,18 @@ export function shouldRefreshMeal(date = new Date(), timezone = "Asia/Seoul") {
   return weekday === "Fri" || weekday === "Sat";
 }
 
+async function publishMeal(env, result) {
+  if (!env.MEAL_APP) return null;
+  try {
+    const published = await env.MEAL_APP.publishMeals(result);
+    console.log("meal published", JSON.stringify(published));
+    return published;
+  } catch (error) {
+    console.error("meal publish", error?.message || error);
+    return null;
+  }
+}
+
 async function sendMealPush(env, mealKey, date, { test = false, restaurant } = {}) {
   const meal = await getMeal(env, date);
   const restaurants = mealForDate(meal, date, mealKey, restaurant);
@@ -478,6 +490,7 @@ async function api(request,env) {
         force: Boolean(body.force),
         debug: Boolean(body.debug)
       });
+      const published = await publishMeal(env, result);
       const availableWeeks = (await getMeals(env)).map(meal => ({
         weekStart: meal.weekStart,
         weekEnd: meal.weekEnd
@@ -485,6 +498,7 @@ async function api(request,env) {
       return json({
         ok:true,
         cached,
+        published:Boolean(published),
         pdfUrl:result.pdfUrl,
         restaurants:result.restaurants.length,
         weekStart:result.weekStart,
@@ -530,7 +544,11 @@ export default {
   },
   async scheduled(_c,env,ctx) {
     ctx.waitUntil(monitor(env).catch(e=>console.error(e)));
-    if (shouldRefreshMeal()) ctx.waitUntil(refreshMeal(env).catch(e=>console.error("meal refresh",e)));
+    if (shouldRefreshMeal()) ctx.waitUntil(
+      refreshMeal(env)
+        .then(({ cached, result }) => cached ? null : publishMeal(env, result))
+        .catch(e=>console.error("meal refresh",e))
+    );
     ctx.waitUntil(notifyDueMeals(env).catch(e=>console.error("meal notification",e)));
   }
 };
