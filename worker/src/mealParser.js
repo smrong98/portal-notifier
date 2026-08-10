@@ -104,12 +104,16 @@ function parsePage(page, referenceDate) {
       const sections = corners.length ? corners : [{ str: "menu", y: row.top }];
       const result = {};
       sections.forEach((corner, index) => {
-        const top = corner.y;
-        const bottom = index < sections.length - 1 ? sections[index + 1].y : row.bottom;
+        // 코너명은 병합된 셀의 세로 중앙에 있으므로 그 글자 좌표를 메뉴의
+        // 시작점으로 사용할 수 없다. 인접한 코너명의 중간점을 셀 경계로 본다.
+        const top = corners.length && index ? midpoint(sections[index - 1].y, corner.y) : row.top;
+        const bottom = corners.length && index < sections.length - 1
+          ? midpoint(corner.y, sections[index + 1].y)
+          : row.bottom;
         const menu = area.filter(item => item !== corner && !MEALS.has(item.str) && !DATE_PATTERN.test(item.str)
           && !CORNER_PATTERN.test(item.str) && !EXCLUDED_SECTION_PATTERN.test(item.str)
           && !isExcludedSectionLine(item, excludedSections) && item.y <= top && item.y >= bottom
-          && !(mealKey === "lunch" && normalizedCorner(corner.str).toLowerCase() === "corner3" && NUMBER_PATTERN.test(item.str)))
+          && !(mealKey === "lunch" && NUMBER_PATTERN.test(item.str)))
           .sort((a, b) => b.y - a.y || a.x - b.x).map(item => item.str);
         if (menu.length) result[normalizedCorner(corner.str)] = menu;
       });
