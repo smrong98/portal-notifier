@@ -109,7 +109,14 @@ export function structureMealText(pages, { pdfUrl, referenceDate = new Date() } 
 }
 
 export async function extractMealPdf(data, options = {}) {
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const [{ getDocument }, { WorkerMessageHandler }] = await Promise.all([
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+    import("pdfjs-dist/legacy/build/pdf.worker.mjs")
+  ]);
+  // Cloudflare Workers cannot start pdf.js's Web Worker. Register the bundled
+  // handler so pdf.js can run its fake worker without resolving pdf.worker.mjs
+  // as a separate module at runtime.
+  globalThis.pdfjsWorker = { WorkerMessageHandler };
   const document = await getDocument({ data: new Uint8Array(data), disableWorker: true, isEvalSupported: false }).promise;
   const pages = [];
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
