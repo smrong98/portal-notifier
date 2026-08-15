@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { downloadMealPdf, getMeal, getMeals, saveMealWeek } from "../src/mealPdf.js";
+import { discoverLatestMealPdf, downloadMealPdf, getMeal, getMeals, saveMealWeek } from "../src/mealPdf.js";
 
 const env = { PORTAL_BASE_URL: "https://dnsep.dncompany.com" };
 
@@ -53,6 +53,52 @@ test("Content-Type 대신 PDF 파일 시그니처를 검증한다", async t => {
     downloadMealPdf(env, "https://dnsep.dncompany.com/privatefiles/public/menu.pdf"),
     /식단 PDF가 아닌 응답입니다: text\/html/
   );
+});
+
+test("식단 게시판의 최신 글에서 PDF 첨부파일 주소를 자동으로 찾는다", async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const requests = [];
+  globalThis.fetch = async (url, options = {}) => {
+    const href = String(url);
+    requests.push({ href, options });
+    if (href.includes("ldloginproc.do")) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: "/", "set-cookie": "JSESSIONID=test; Path=/; Secure; HttpOnly" }
+      });
+    }
+    if (href === "https://dnsep.dncompany.com/") return new Response("ok");
+    if (href.includes("selectBoardTopFive.do")) {
+      return Response.json({ result: [
+        { board_id: "59611c25-6fa5-4600-8944-3da39f87666a", attach_file_yn: "Y" }
+      ] });
+    }
+    if (href.includes("selectBoardFileList.do")) {
+      return Response.json([{
+        file_ext: "pdf",
+        file_url: "/privatefiles/public/CN99999/board/59611c25-6fa5-4600-8944-3da39f87666a/1dd4b955-6869-4dbc-abce-8111095242c4.pdf",
+        use_yn: "Y"
+      }]);
+    }
+    throw new Error(`예상하지 못한 요청: ${href}`);
+  };
+
+  const pdfUrl = await discoverLatestMealPdf({
+    ...env,
+    PORTAL_LOGIN_URL: "https://dnsep.dncompany.com/ldloginproc.do",
+    PORTAL_BOARD_API_URL: "https://dnsep.dncompany.com/board/selectBoardTopFive.do",
+    MEAL_BOARDMST_ID: "f2aff21d-d839-5cb4-5dcf-76a91a1c1627",
+    PORTAL_USERNAME: "user",
+    PORTAL_PASSWORD: "password"
+  });
+
+  assert.equal(pdfUrl,
+    "https://dnsep.dncompany.com/privatefiles/public/CN99999/board/59611c25-6fa5-4600-8944-3da39f87666a/1dd4b955-6869-4dbc-abce-8111095242c4.pdf");
+  assert.match(requests.find(request => request.href.includes("selectBoardTopFive.do")).href,
+    /boardmst_id=f2aff21d-d839-5cb4-5dcf-76a91a1c1627/);
+  assert.match(requests.find(request => request.href.includes("selectBoardFileList.do")).options.headers.Cookie,
+    /JSESSIONID=test/);
 });
 
 test("주차별 식단은 최근 3주를 보관하고 날짜에 맞는 주차를 반환한다", async () => {

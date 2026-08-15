@@ -9,6 +9,7 @@ const MAX_STORED_WEEKS = 3;
 const DEFAULT_REFRESH_AGE_MS = 6 * 60 * 60 * 1000;
 const MAX_DEBUG_ITEMS = 3000;
 const PDF_SIGNATURE = "%PDF-";
+const MEAL_BOARD_PAGE_SIZE = 5;
 
 const mealWeekKey = weekStart => `${MEAL_WEEK_PREFIX}${weekStart}`;
 
@@ -93,6 +94,51 @@ async function pdfResponseData(response) {
   return data;
 }
 
+function portalJsonHeaders(env, jar) {
+  return {
+    Cookie: cookieHeader(jar),
+    accept: "application/json, text/javascript, */*; q=0.01",
+    "x-requested-with": "XMLHttpRequest",
+    referer: `${env.PORTAL_BASE_URL}/`
+  };
+}
+
+async function responseJson(response, label) {
+  if (!response.ok) throw new Error(`${label} 실패: HTTP ${response.status}`);
+  try { return await response.json(); }
+  catch { throw new Error(`${label} 응답이 JSON이 아닙니다.`); }
+}
+
+export async function discoverLatestMealPdf(env) {
+  if (!env.MEAL_BOARDMST_ID) throw new Error("MEAL_BOARDMST_ID 설정이 필요합니다.");
+  const jar = await login(env);
+  const headers = portalJsonHeaders(env, jar);
+  const boardUrl = new URL(env.PORTAL_BOARD_API_URL);
+  boardUrl.searchParams.set("boardmst_id", env.MEAL_BOARDMST_ID);
+  boardUrl.searchParams.set("pageSize", String(MEAL_BOARD_PAGE_SIZE));
+  boardUrl.searchParams.set("view_body", "N");
+  boardUrl.searchParams.set("board_type", "");
+  boardUrl.searchParams.set("_", String(Date.now()));
+
+  const boardData = await responseJson(await fetch(boardUrl, { headers }), "식단 게시판 조회");
+  const posts = Array.isArray(boardData?.result)
+    ? boardData.result.filter(post => post?.board_id && post.attach_file_yn === "Y")
+    : [];
+  if (!posts.length) throw new Error("식단 게시판에서 첨부파일이 있는 글을 찾지 못했습니다.");
+
+  for (const post of posts) {
+    const fileUrl = new URL("/board/selectBoardFileList.do", env.PORTAL_BASE_URL);
+    fileUrl.searchParams.set("board_id", post.board_id);
+    const files = await responseJson(await fetch(fileUrl, { headers }), "식단 첨부파일 조회");
+    const pdf = Array.isArray(files) && files.find(file =>
+      file?.use_yn !== "N" && (String(file?.file_ext || "").toLowerCase() === "pdf"
+        || /\.pdf(?:$|[?#])/i.test(String(file?.file_url || "")))
+    );
+    if (pdf?.file_url) return new URL(pdf.file_url, env.PORTAL_BASE_URL).toString();
+  }
+  throw new Error("최신 식단 게시글에서 PDF 첨부파일을 찾지 못했습니다.");
+}
+
 export async function downloadMealPdf(env, pdfUrl) {
   const headers = {
     accept: "application/pdf, application/octet-stream;q=0.9, */*;q=0.1",
@@ -118,8 +164,7 @@ export async function refreshMeal(env, {
   maxAgeMs = DEFAULT_REFRESH_AGE_MS
 } = {}) {
   const previous = await env.PORTAL_KV.get(MEAL_META_KEY, "json") || {};
-  pdfUrl ||= previous.pdfUrl || env.MEAL_PDF_URL;
-  if (!pdfUrl) throw new Error("MEAL_PDF_URL 또는 요청 본문의 pdfUrl이 필요합니다.");
+  pdfUrl ||= await discoverLatestMealPdf(env);
   const requestedUrl = new URL(pdfUrl);
   if (requestedUrl.protocol !== "https:" || requestedUrl.origin !== new URL(env.PORTAL_BASE_URL).origin) {
     throw new Error("식단 PDF URL은 포탈의 HTTPS URL이어야 합니다.");
